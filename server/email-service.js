@@ -35,7 +35,8 @@ class EmailService {
     const response = await gmail.users.messages.list({
       userId: 'me',
       labelIds: ['INBOX'],
-      maxResults: limit
+      maxResults: limit * 2, // Fetch more to account for filtering
+      q: 'newer_than:14d -category:promotions -category:social'
     });
 
     const emails = [];
@@ -45,10 +46,20 @@ class EmailService {
         id: message.id
       });
       
+      // Skip emails with promotional/social categories
+      if (this.shouldSkipEmail(email.data)) {
+        continue;
+      }
+      
       const headers = email.data.payload.headers;
       const subject = headers.find(h => h.name === 'Subject')?.value || 'No Subject';
       const from = headers.find(h => h.name === 'From')?.value || 'Unknown';
       const date = headers.find(h => h.name === 'Date')?.value || '';
+      
+      // Skip emails from suspicious senders
+      if (this.isUnwantedSender(from, headers)) {
+        continue;
+      }
       
       emails.push({
         id: message.id,
@@ -59,9 +70,85 @@ class EmailService {
         unread: email.data.labelIds?.includes('UNREAD') || false,
         body: await this.extractEmailBody(email.data.payload)
       });
+      
+      // Stop once we have enough personal emails
+      if (emails.length >= limit) {
+        break;
+      }
     }
     
     return emails;
+  }
+
+  // Check if email should be skipped based on labels
+  shouldSkipEmail(emailData) {
+    const labelIds = emailData.labelIds || [];
+    
+    // Skip emails with promotional/social/updates categories
+    const unwantedCategories = [
+      'CATEGORY_PROMOTIONS',
+      'CATEGORY_SOCIAL',
+      'CATEGORY_UPDATES',
+      'CATEGORY_FORUMS'
+    ];
+    
+    return unwantedCategories.some(category => labelIds.includes(category));
+  }
+
+  // Check if sender should be filtered out
+  isUnwantedSender(fromHeader, headers) {
+    const from = fromHeader.toLowerCase();
+    
+    // Skip noreply and automated senders
+    const unwantedPatterns = [
+      /noreply@/i,
+      /no-reply@/i,
+      /donotreply@/i,
+      /do-not-reply@/i,
+      /@mailer\./i,
+      /@newsletter\./i,
+      /@notifications?\./i,
+      /@support\./i,
+      /@hello\./i,
+      /@info\./i,
+      /@updates?\./i,
+      /@news\./i,
+      /@marketing\./i,
+      /@promo\./i,
+      /@campaign\./i
+    ];
+    
+    // Check for unwanted sender patterns
+    if (unwantedPatterns.some(pattern => pattern.test(from))) {
+      return true;
+    }
+    
+    // Check for List-Unsubscribe header (indicates newsletter/promotional email)
+    const listUnsubscribe = headers.find(h => 
+      h.name.toLowerCase() === 'list-unsubscribe'
+    );
+    if (listUnsubscribe) {
+      return true;
+    }
+    
+    // Check for other newsletter/promotional headers
+    const promotionalHeaders = [
+      'list-id',
+      'precedence',
+      'x-mailer',
+      'x-campaign',
+      'x-mailgun'
+    ];
+    
+    const hasPromotionalHeaders = promotionalHeaders.some(headerName =>
+      headers.some(h => h.name.toLowerCase() === headerName)
+    );
+    
+    if (hasPromotionalHeaders) {
+      return true;
+    }
+    
+    return false;
   }
 
   // Send email
@@ -143,10 +230,20 @@ class EmailService {
       id: emailId
     });
 
+    // Check if this email should be filtered out
+    if (this.shouldSkipEmail(email.data)) {
+      throw new Error('Email not available (filtered out)');
+    }
+
     const headers = email.data.payload.headers;
     const subject = headers.find(h => h.name === 'Subject')?.value || 'No Subject';
     const from = headers.find(h => h.name === 'From')?.value || 'Unknown';
     const date = headers.find(h => h.name === 'Date')?.value || '';
+    
+    // Check if sender should be filtered out
+    if (this.isUnwantedSender(from, headers)) {
+      throw new Error('Email not available (filtered out)');
+    }
     
     return {
       id: emailId,
@@ -195,7 +292,7 @@ class EmailService {
       totalEmails: totalCount,
       unreadEmails: unreadCount,
       readEmails: totalCount - unreadCount,
-      summary: `You have ${unreadCount} unread emails out of ${totalCount} total emails in your inbox.`
+      summary: `You have ${unreadCount} unread personal emails out of ${totalCount} total personal emails in your inbox (excluding promotions and newsletters).`
     };
   }
 
