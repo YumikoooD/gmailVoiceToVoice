@@ -4,6 +4,8 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 
+openai-realtime-console
+
 # Sensitive files
 credentials.json
 token.json
