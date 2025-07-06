@@ -1,0 +1,15 @@
+node_modules
+.git
+.env
+.env.*
+config.env
+client_secret.value
+openai-realtime-console
+server.js
+*.log
+.DS_Store
+.vscode
+.idea
+README.md
+OAUTH_SETUP.md
+LICENSE 

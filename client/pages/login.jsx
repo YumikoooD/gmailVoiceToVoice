@@ -15,7 +15,7 @@ export default function Login() {
     // Check OAuth configuration
     const checkConfig = async () => {
       try {
-        const response = await fetch('/auth/config-test');
+        const response = await fetch('/api/auth/config-test');
         const config = await response.json();
         setConfigStatus(config);
         
@@ -31,7 +31,7 @@ export default function Login() {
     // Check if user is already authenticated
     const checkAuth = async () => {
       try {
-        const response = await fetch('/auth/status');
+        const response = await fetch('/api/auth/status');
         const data = await response.json();
         if (data.authenticated) {
           navigate('/');
@@ -57,7 +57,7 @@ export default function Login() {
     
     try {
       // Redirect to OAuth flow
-      window.location.href = '/auth/login';
+      window.location.href = '/api/auth/login';
     } catch (err) {
       setError('Failed to start authentication process');
       setLoading(false);

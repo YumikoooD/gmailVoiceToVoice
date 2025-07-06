@@ -10,7 +10,7 @@ function ProtectedRoute({ children }) {
   useEffect(() => {
     const checkAuth = async () => {
       try {
-        const response = await fetch('/auth/status');
+        const response = await fetch('/api/auth/status');
         const data = await response.json();
         setIsAuthenticated(data.authenticated);
       } catch (error) {
