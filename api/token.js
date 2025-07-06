@@ -19,7 +19,7 @@ export default async function handler(req, res) {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          model: "gpt-4o-realtime-preview-2025-06-03",
+          model: "gpt-4o-mini-realtime-preview-2024-12-17",
           voice: "verse",
         }),
       },

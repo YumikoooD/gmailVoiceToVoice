@@ -25,10 +25,15 @@ app.use(session({
 }));
 
 // OAuth2 client setup
+const isProduction = process.env.NODE_ENV === 'production';
+const redirectUri = isProduction ? 
+  process.env.GMAIL_REDIRECT_URI : 
+  `http://localhost:${port}/api/auth/callback`;
+
 const oauth2Client = new google.auth.OAuth2(
   process.env.GMAIL_CLIENT_ID,
   process.env.GMAIL_CLIENT_SECRET,
-  process.env.GMAIL_REDIRECT_URI
+  redirectUri
 );
 
 // Generate OAuth2 URL
@@ -59,12 +64,12 @@ const requireAuth = (req, res, next) => {
 };
 
 // Auth routes
-app.get("/auth/login", (req, res) => {
+app.get("/api/auth/login", (req, res) => {
   const authUrl = getAuthUrl();
   res.redirect(authUrl);
 });
 
-app.get("/auth/callback", async (req, res) => {
+app.get("/api/auth/callback", async (req, res) => {
   try {
     const { code } = req.query;
     const { tokens } = await oauth2Client.getToken(code);
@@ -85,19 +90,19 @@ app.get("/auth/callback", async (req, res) => {
   }
 });
 
-app.get("/auth/logout", (req, res) => {
+app.get("/api/auth/logout", (req, res) => {
   req.session.destroy();
   res.redirect('/login');
 });
 
-app.get("/auth/status", (req, res) => {
+app.get("/api/auth/status", (req, res) => {
   res.json({
     authenticated: !!req.session.authenticated,
     tokens: req.session.tokens ? 'present' : 'absent'
   });
 });
 
-app.get("/auth/config-test", (req, res) => {
+app.get("/api/auth/config-test", (req, res) => {
   const hasClientId = !!process.env.GMAIL_CLIENT_ID && !process.env.GMAIL_CLIENT_ID.includes('your-');
   const hasClientSecret = !!process.env.GMAIL_CLIENT_SECRET && !process.env.GMAIL_CLIENT_SECRET.includes('your-');
   
@@ -105,12 +110,12 @@ app.get("/auth/config-test", (req, res) => {
     configured: hasClientId && hasClientSecret,
     clientId: hasClientId ? 'configured' : 'missing or placeholder',
     clientSecret: hasClientSecret ? 'configured' : 'missing or placeholder',
-    redirectUri: process.env.GMAIL_REDIRECT_URI
+    redirectUri: redirectUri
   });
 });
 
 // API route for token generation
-app.get("/token", async (req, res) => {
+app.get("/api/token", async (req, res) => {
   try {
     const response = await fetch(
       "https://api.openai.com/v1/realtime/sessions",
@@ -121,7 +126,7 @@ app.get("/token", async (req, res) => {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          model: "gpt-4o-realtime-preview-2025-06-03",
+          model: "gpt-4o-mini-realtime-preview-2024-12-17",
           voice: "verse",
         }),
       },
