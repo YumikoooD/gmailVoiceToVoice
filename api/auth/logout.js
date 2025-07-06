@@ -3,7 +3,7 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  // Clear cookies
+  // Clear cookies with proper expiration
   res.setHeader('Set-Cookie', [
     'gmail_tokens=; HttpOnly; Secure; SameSite=Strict; Max-Age=0; Path=/',
     'authenticated=; HttpOnly; Secure; SameSite=Strict; Max-Age=0; Path=/'

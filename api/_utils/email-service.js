@@ -1,5 +1,5 @@
 import { google } from 'googleapis';
-import { format, parseISO } from 'date-fns';
+import { format } from 'date-fns';
 
 class EmailService {
   constructor() {
@@ -9,16 +9,33 @@ class EmailService {
 
   // Gmail Authentication
   async authenticateGmail(tokens) {
-    const oauth2Client = new google.auth.OAuth2(
-      process.env.GMAIL_CLIENT_ID,
-      process.env.GMAIL_CLIENT_SECRET,
-      process.env.GMAIL_REDIRECT_URI
-    );
-    
-    oauth2Client.setCredentials(tokens);
-    this.gmailAuth = oauth2Client;
-    this.activeProvider = 'gmail';
-    return true;
+    try {
+      const oauth2Client = new google.auth.OAuth2(
+        process.env.GMAIL_CLIENT_ID,
+        process.env.GMAIL_CLIENT_SECRET,
+        process.env.GMAIL_REDIRECT_URI
+      );
+      
+      // Validate environment variables
+      if (!process.env.GMAIL_CLIENT_ID || !process.env.GMAIL_CLIENT_SECRET) {
+        throw new Error('Missing Gmail OAuth credentials in environment variables');
+      }
+      
+      // Validate tokens
+      if (!tokens || !tokens.access_token) {
+        throw new Error('Invalid or missing tokens');
+      }
+      
+      oauth2Client.setCredentials(tokens);
+      this.gmailAuth = oauth2Client;
+      this.activeProvider = 'gmail';
+      
+      console.log('Gmail authentication successful');
+      return true;
+    } catch (error) {
+      console.error('Gmail authentication failed:', error);
+      throw error;
+    }
   }
 
   isAuthenticated() {
@@ -31,49 +48,69 @@ class EmailService {
       throw new Error('Not authenticated');
     }
 
-    const gmail = google.gmail({ version: 'v1', auth: this.gmailAuth });
-    
-    // Get list of messages
-    const response = await gmail.users.messages.list({
-      userId: 'me',
-      q: 'in:inbox',
-      maxResults
-    });
+    try {
+      const gmail = google.gmail({ version: 'v1', auth: this.gmailAuth });
+      
+      console.log('Fetching inbox emails...');
+      
+      // Get list of messages
+      const response = await gmail.users.messages.list({
+        userId: 'me',
+        q: 'in:inbox',
+        maxResults
+      });
 
-    const messages = response.data.messages || [];
-    
-    // Get detailed info for each message
-    const emails = [];
-    for (const message of messages) {
-      try {
-        const details = await gmail.users.messages.get({
-          userId: 'me',
-          id: message.id,
-          format: 'metadata',
-          metadataHeaders: ['Subject', 'From', 'Date', 'To']
-        });
+      const messages = response.data.messages || [];
+      console.log(`Found ${messages.length} messages`);
+      
+      // Get detailed info for each message
+      const emails = [];
+      for (const message of messages) {
+        try {
+          const details = await gmail.users.messages.get({
+            userId: 'me',
+            id: message.id,
+            format: 'metadata',
+            metadataHeaders: ['Subject', 'From', 'Date', 'To']
+          });
 
-        const headers = details.data.payload.headers;
-        const subject = headers.find(h => h.name === 'Subject')?.value || 'No Subject';
-        const from = headers.find(h => h.name === 'From')?.value || 'Unknown';
-        const date = headers.find(h => h.name === 'Date')?.value || '';
-        const to = headers.find(h => h.name === 'To')?.value || '';
+          const headers = details.data.payload.headers;
+          const subject = headers.find(h => h.name === 'Subject')?.value || 'No Subject';
+          const from = headers.find(h => h.name === 'From')?.value || 'Unknown';
+          const date = headers.find(h => h.name === 'Date')?.value || '';
+          const to = headers.find(h => h.name === 'To')?.value || '';
 
-        emails.push({
-          id: message.id,
-          subject,
-          from,
-          to,
-          date: date ? format(parseISO(date), 'MMM d, yyyy h:mm a') : '',
-          isRead: !details.data.labelIds?.includes('UNREAD'),
-          snippet: details.data.snippet || ''
-        });
-      } catch (error) {
-        console.error('Error fetching message:', error);
+          // Format date safely
+          let formattedDate = 'Unknown';
+          if (date) {
+            try {
+              formattedDate = format(new Date(date), 'MMM d, yyyy h:mm a');
+            } catch (error) {
+              console.error('Error formatting date:', date, error);
+              formattedDate = date; // Use original date string if formatting fails
+            }
+          }
+
+          emails.push({
+            id: message.id,
+            subject,
+            from,
+            to,
+            date: formattedDate,
+            isRead: !details.data.labelIds?.includes('UNREAD'),
+            snippet: details.data.snippet || ''
+          });
+        } catch (error) {
+          console.error('Error fetching message:', message.id, error);
+        }
       }
-    }
 
-    return emails;
+      console.log(`Successfully processed ${emails.length} emails`);
+      return emails;
+    } catch (error) {
+      console.error('Error fetching inbox emails:', error);
+      throw error;
+    }
   }
 
   // Get detailed email content
@@ -98,6 +135,17 @@ class EmailService {
     const date = headers.find(h => h.name === 'Date')?.value || '';
     const to = headers.find(h => h.name === 'To')?.value || '';
 
+    // Format date safely
+    let formattedDate = 'Unknown';
+    if (date) {
+      try {
+        formattedDate = format(new Date(date), 'MMM d, yyyy h:mm a');
+      } catch (error) {
+        console.error('Error formatting date:', date, error);
+        formattedDate = date; // Use original date string if formatting fails
+      }
+    }
+
     // Extract body content
     let body = '';
     if (message.payload.body && message.payload.body.data) {
@@ -115,7 +163,7 @@ class EmailService {
       subject,
       from,
       to,
-      date: date ? format(parseISO(date), 'MMM d, yyyy h:mm a') : '',
+      date: formattedDate,
       body,
       isRead: !message.labelIds?.includes('UNREAD'),
       snippet: message.snippet || ''

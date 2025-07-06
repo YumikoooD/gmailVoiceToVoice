@@ -21,9 +21,10 @@ export default async function handler(req, res) {
     const { tokens } = await oauth2Client.getToken(code);
     
     // For Vercel, we need to handle sessions differently
-    // Store tokens in a secure cookie or external session store
+    // Store tokens in a secure cookie with proper encoding
+    const encodedTokens = encodeURIComponent(JSON.stringify(tokens));
     res.setHeader('Set-Cookie', [
-      `gmail_tokens=${JSON.stringify(tokens)}; HttpOnly; Secure; SameSite=Strict; Max-Age=86400; Path=/`,
+      `gmail_tokens=${encodedTokens}; HttpOnly; Secure; SameSite=Strict; Max-Age=86400; Path=/`,
       `authenticated=true; HttpOnly; Secure; SameSite=Strict; Max-Age=86400; Path=/`
     ]);
     
