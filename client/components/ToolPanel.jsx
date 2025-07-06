@@ -5,7 +5,7 @@ const emailTools = [
   {
     type: "function",
     name: "get_inbox_summary",
-    description: "Get a summary of the user's email inbox including unread count and recent emails",
+    description: "REQUIRED: Must be called before discussing any emails. Gets real email data from user's inbox including unread count and recent emails. Call this when user asks about inbox, today's emails, recent emails, or any email-related questions.",
     parameters: {
       type: "object",
       properties: {
@@ -20,13 +20,13 @@ const emailTools = [
   {
     type: "function", 
     name: "read_email",
-    description: "Read the full content of a specific email",
+    description: "Read the full content of a specific email. ONLY use real email IDs obtained from get_inbox_summary function. Never make up email IDs.",
     parameters: {
       type: "object",
       properties: {
         emailId: {
           type: "string",
-          description: "The ID of the email to read"
+          description: "The REAL ID of the email to read (must be from previous get_inbox_summary call)"
         }
       },
       required: ["emailId"]
@@ -62,7 +62,7 @@ const emailTools = [
   {
     type: "function",
     name: "mark_email_read",
-    description: "Mark an email as read or unread",
+    description: "Mark an email as read or unread. ONLY use real email IDs from get_inbox_summary results.",
     parameters: {
       type: "object",
       properties: {
@@ -81,7 +81,7 @@ const emailTools = [
   {
     type: "function",
     name: "delete_email",
-    description: "Delete or archive an email",
+    description: "Delete or archive an email. ONLY use real email IDs from get_inbox_summary results.",
     parameters: {
       type: "object",
       properties: {
@@ -96,7 +96,7 @@ const emailTools = [
   {
     type: "function",
     name: "draft_email_reply",
-    description: "Generate a draft reply to an email based on the content and user's instructions",
+    description: "Generate a draft reply to an email based on the content and user's instructions. ONLY use real email IDs from get_inbox_summary results.",
     parameters: {
       type: "object",
       properties: {
@@ -124,18 +124,32 @@ const sessionUpdate = {
   session: {
     tools: emailTools,
     tool_choice: "auto",
-    instructions: `You are an AI Email Assistant helping the user manage their inbox through voice commands. 
+    instructions: `You are an AI Email Assistant helping the user manage their inbox through voice commands.
+
+CRITICAL RULES - NEVER VIOLATE THESE:
+1. NEVER make up, invent, or hallucinate email content, senders, subjects, or dates
+2. ALWAYS use function calls to get real email data - never guess or assume
+3. If you don't have real data from a function call, say "I need to check your inbox first"
+4. NEVER describe emails that you haven't retrieved through function calls
+
+REQUIRED BEHAVIOR:
+- When asked about emails (today, recent, unread, etc.), IMMEDIATELY call get_inbox_summary
+- When asked to read specific emails, FIRST get the inbox, THEN call read_email with real IDs
+- When asked about emails from specific dates, get the inbox and filter the real results
+- If no emails match the criteria, say "I don't see any emails matching that criteria"
 
 Your key responsibilities:
-1. Provide inbox summaries and triaging
-2. Read emails aloud with proper emphasis
-3. Draft replies based on user instructions
-4. Handle email organization (mark as read, delete, etc.)
+1. Get REAL inbox data using functions before any email discussions
+2. Read actual emails aloud with proper emphasis (only real emails from functions)
+3. Draft replies based on REAL email content from function calls
+4. Handle email organization using actual email IDs from function results
 5. Help achieve "Inbox Zero" through efficient email processing
 
-Always prioritize safety and ask for confirmation before sending emails or making major changes.
-When reading emails, focus on the most important information first (sender, subject, key points).
-For replies, match the user's communication style and be professional.`
+Safety rules:
+- Ask for confirmation before sending emails or making major changes
+- When reading emails, focus on the most important information first (sender, subject, key points)
+- For replies, match the user's communication style and be professional
+- If a function call fails, explain what happened instead of making up data`
   },
 };
 
