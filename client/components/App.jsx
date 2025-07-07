@@ -208,8 +208,7 @@ export default function App() {
     const handleMCPEvents = async () => {
       const mostRecentEvent = events[0];
       
-      // Debug logging
-      console.log('Latest event:', mostRecentEvent);
+
       
       // Send MCP tools update when session is created (like original ToolPanel)
       if (mostRecentEvent.type === "session.created" && pendingSessionUpdate) {
@@ -224,7 +223,7 @@ export default function App() {
         console.log('Found response.done event with output:', mostRecentEvent.response.output);
         for (const output of mostRecentEvent.response.output) {
           if (output.type === "function_call") {
-            console.log('MCP Function call detected:', output);
+            console.log('🔧 MCP Function call detected:', output.name, 'with args:', output.arguments);
             
             try {
               const { name, arguments: args, call_id } = output;

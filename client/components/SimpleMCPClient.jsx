@@ -5,7 +5,6 @@ export function useSimpleMCPClient() {
   const [connected, setConnected] = useState(false);
   const [error, setError] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [authChecked, setAuthChecked] = useState(false);
 
   useEffect(() => {
     let isMounted = true;
@@ -25,16 +24,9 @@ export function useSimpleMCPClient() {
         }
         
         const authData = await authResponse.json();
-        console.log('Auth status:', authData);
-        console.log('Auth response headers:', authResponse.headers);
-        
-        if (isMounted) {
-          setAuthChecked(true);
-        }
         
         if (!authData.authenticated) {
           if (isMounted) {
-            console.log('User not authenticated - tokens:', authData.tokens);
             setError('User not authenticated - please log in through the web interface');
             setConnected(false);
             setIsLoading(false);
@@ -53,7 +45,6 @@ export function useSimpleMCPClient() {
             setTools(data.tools || []);
             setConnected(true);
             setError(null);
-            console.log('MCP tools loaded:', data.tools);
           }
         } else {
           const errorData = await toolsResponse.json().catch(() => ({}));
@@ -79,8 +70,6 @@ export function useSimpleMCPClient() {
     };
   }, []);
 
-
-
   // Memoize the tools for OpenAI to prevent infinite re-renders
   const toolsForOpenAI = useMemo(() => {
     if (!connected || tools.length === 0) return [];
@@ -103,7 +92,6 @@ export function useSimpleMCPClient() {
     connected,
     error,
     isLoading,
-    authChecked,
     getToolsForOpenAI
   };
 } 

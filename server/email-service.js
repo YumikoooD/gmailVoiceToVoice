@@ -22,44 +22,58 @@ class EmailService {
   }
 
   // Get inbox emails
-  async getInboxEmails(limit = 20) {
+  async getInboxEmails(limit = 20, query = null) {
     if (this.activeProvider !== 'gmail') {
       throw new Error('Gmail not authenticated');
     }
-    return await this.getGmailInbox(limit);
+    return await this.getGmailInbox(limit, query);
   }
 
-  async getGmailInbox(limit) {
+  async getGmailInbox(limit, query) {
     const gmail = google.gmail({ version: 'v1', auth: this.gmailAuth });
+    
+    // Build the Gmail query
+    let gmailQuery = '';
+    if (query) {
+      // User provided a custom query (e.g., "after:2024/01/01", "is:unread")
+      gmailQuery = query;
+    } else {
+      // Default query: recent emails, excluding only promotions
+      gmailQuery = 'newer_than:14d -category:promotions';
+    }
+    
+    console.log('Gmail query:', gmailQuery);
     
     const response = await gmail.users.messages.list({
       userId: 'me',
       labelIds: ['INBOX'],
       maxResults: limit * 2, // Fetch more to account for filtering
-      q: 'newer_than:14d -category:promotions -category:social'
+      q: gmailQuery
     });
 
     const emails = [];
+    console.log(`Gmail API returned ${response.data.messages?.length || 0} messages`);
+    
     for (const message of response.data.messages || []) {
       const email = await gmail.users.messages.get({
         userId: 'me',
         id: message.id
       });
       
-      // Skip emails with promotional/social categories
-      if (this.shouldSkipEmail(email.data)) {
-        continue;
-      }
-      
       const headers = email.data.payload.headers;
       const subject = headers.find(h => h.name === 'Subject')?.value || 'No Subject';
       const from = headers.find(h => h.name === 'From')?.value || 'Unknown';
       const date = headers.find(h => h.name === 'Date')?.value || '';
       
-      // Skip emails from suspicious senders
-      if (this.isUnwantedSender(from, headers)) {
+      console.log(`Processing email: "${subject}" from "${from}"`);
+      
+      // Only skip promotional emails (keep everything else)
+      if (this.isPromotionalEmail(email.data)) {
+        console.log(`  → Skipped: Promotional email`);
         continue;
       }
+      
+      console.log(`  → Added to results`);
       
       emails.push({
         id: message.id,
@@ -77,78 +91,16 @@ class EmailService {
       }
     }
     
+    console.log(`Filter summary: Found ${emails.length} emails from ${response.data.messages?.length || 0} total messages`);
     return emails;
   }
 
-  // Check if email should be skipped based on labels
-  shouldSkipEmail(emailData) {
+  // Simple promotional email detection - only filters obvious promotional emails
+  isPromotionalEmail(emailData) {
     const labelIds = emailData.labelIds || [];
     
-    // Skip emails with promotional/social/updates categories
-    const unwantedCategories = [
-      'CATEGORY_PROMOTIONS',
-      'CATEGORY_SOCIAL',
-      'CATEGORY_UPDATES',
-      'CATEGORY_FORUMS'
-    ];
-    
-    return unwantedCategories.some(category => labelIds.includes(category));
-  }
-
-  // Check if sender should be filtered out
-  isUnwantedSender(fromHeader, headers) {
-    const from = fromHeader.toLowerCase();
-    
-    // Skip noreply and automated senders
-    const unwantedPatterns = [
-      /noreply@/i,
-      /no-reply@/i,
-      /donotreply@/i,
-      /do-not-reply@/i,
-      /@mailer\./i,
-      /@newsletter\./i,
-      /@notifications?\./i,
-      /@support\./i,
-      /@hello\./i,
-      /@info\./i,
-      /@updates?\./i,
-      /@news\./i,
-      /@marketing\./i,
-      /@promo\./i,
-      /@campaign\./i
-    ];
-    
-    // Check for unwanted sender patterns
-    if (unwantedPatterns.some(pattern => pattern.test(from))) {
-      return true;
-    }
-    
-    // Check for List-Unsubscribe header (indicates newsletter/promotional email)
-    const listUnsubscribe = headers.find(h => 
-      h.name.toLowerCase() === 'list-unsubscribe'
-    );
-    if (listUnsubscribe) {
-      return true;
-    }
-    
-    // Check for other newsletter/promotional headers
-    const promotionalHeaders = [
-      'list-id',
-      'precedence',
-      'x-mailer',
-      'x-campaign',
-      'x-mailgun'
-    ];
-    
-    const hasPromotionalHeaders = promotionalHeaders.some(headerName =>
-      headers.some(h => h.name.toLowerCase() === headerName)
-    );
-    
-    if (hasPromotionalHeaders) {
-      return true;
-    }
-    
-    return false;
+    // Only filter emails that Gmail has already categorized as promotions
+    return labelIds.includes('CATEGORY_PROMOTIONS');
   }
 
   // Send email

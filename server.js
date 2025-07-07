@@ -260,7 +260,7 @@ app.get("/api/mcp/list-tools", requireAuth, async (req, res) => {
     const tools = [
       {
         name: 'list_emails',
-        description: 'List recent emails from inbox with optional filtering',
+        description: 'REQUIRED: Must be called for ANY email listing request. Gets real emails from user\'s Gmail inbox. Use this when user asks about: recent emails, last emails, unread emails, inbox content, email summaries, or any email listing query. NEVER describe emails without calling this function first.',
         inputSchema: {
           type: 'object',
           properties: {
@@ -271,7 +271,7 @@ app.get("/api/mcp/list-tools", requireAuth, async (req, res) => {
             },
             query: {
               type: 'string',
-              description: 'Gmail query syntax for filtering (e.g., "is:unread", "from:example@gmail.com")'
+              description: 'Gmail query syntax for filtering. Examples: "is:unread" (unread emails), "from:example@gmail.com" (from specific sender), "after:2024/01/01" (emails after date), "before:2024/12/31" (emails before date), "newer_than:7d" (last 7 days), "older_than:1m" (older than 1 month), "subject:meeting" (emails with subject containing meeting)'
             }
           }
         }
@@ -417,7 +417,8 @@ async function listEmails(args, emailService) {
   const { maxResults = 20, query } = args;
   
   try {
-    const emails = await emailService.getInboxEmails(maxResults);
+    console.log('Listing emails with args:', args);
+    const emails = await emailService.getInboxEmails(maxResults, query);
     const summary = emailService.generateEmailSummary(emails);
     
     return {

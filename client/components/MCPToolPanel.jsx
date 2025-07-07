@@ -1,14 +1,15 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useSimpleMCPClient } from './SimpleMCPClient';
-import { Mail, Check, X, Send, Trash2, AlertCircle } from 'react-feather';
+import { Mail, Check, X, AlertCircle } from 'react-feather';
+
+const currentYear = new Date().getFullYear();
+const currentMonth = String(new Date().getMonth() + 1).padStart(2, '0');
+const currentDay = String(new Date().getDate()).padStart(2, '0');
 
 export default function MCPToolPanel({ 
-  onToolsUpdate, 
-  summary, 
-  emails, 
-  lastAction 
+  onToolsUpdate
 }) {
-  const { tools, connected, error, isLoading, authChecked, getToolsForOpenAI } = useSimpleMCPClient();
+  const { tools, connected, error, isLoading, getToolsForOpenAI } = useSimpleMCPClient();
   const [mcpStatus, setMcpStatus] = useState('disconnected');
   const sessionUpdateSent = useRef(false);
 
@@ -41,33 +42,58 @@ export default function MCPToolPanel({
           tool_choice: "auto",
           instructions: `You are an AI Email Assistant helping the user manage their inbox through voice commands.
 
-CRITICAL: You are now using MCP (Model Context Protocol) for Gmail integration. ALL email operations must use MCP tools.
+🚨 CRITICAL RULE - NEVER VIOLATE THIS:
+You MUST use MCP tools for ALL email operations. You are FORBIDDEN from describing, listing, or mentioning ANY email content without first calling the appropriate MCP tool. If you don't call a tool when discussing emails, you are HALLUCINATING and providing false information.
 
-AVAILABLE MCP TOOLS:
+📧 MANDATORY TOOL USAGE:
+- ANY question about emails → IMMEDIATELY call list_emails
+- User asks "what are my emails" → call list_emails  
+- User asks "show me recent emails" → call list_emails
+- User asks "what are my last 5 emails" → call list_emails with maxResults: 5
+- User asks "any unread emails" → call list_emails with query: "is:unread"
+- User asks "emails from today" → call list_emails with query: "newer_than:1d"
+- User asks "emails from this week" → call list_emails with query: "newer_than:7d"
+- User asks "emails from January" → call list_emails with query: "after:${currentYear}/01/01 before:${currentYear}/02/01"
+- User asks "emails after December 1st" → call list_emails with query: "after:${currentYear}/12/01"
+- User asks "emails before last Monday" → call list_emails with query: "before:${currentYear}${currentMonth} ${currentDay}"
+- User asks "emails from John" → first call list_emails with query: "from:john", if a result is found, ask the user "Do you mean John [email]?", confirm the identity, and only then proceed with the accurate query using the confirmed address.
+- User asks about specific email → call get_email_details with emailId
+- User wants to send email → call send_email
+- User wants to mark email → call mark_email_read  
+- User wants to delete email → call delete_email
+
+🔥 AVAILABLE MCP TOOLS:
 ${tools.map(tool => `- ${tool.name}: ${tool.description}`).join('\n')}
 
-WORKFLOW:
-1. When user asks about emails → call list_emails tool
-2. When user asks to read specific email → call get_email_details tool 
-3. When user asks to send email → call send_email tool
-4. When user asks to mark email → call mark_email_read tool
-5. When user asks to delete email → call delete_email tool
+⚡ RESPONSE RULES:
+1. BEFORE discussing ANY emails → Call list_emails first
+2. NEVER say "you have 3 emails from..." without calling list_emails first
+3. NEVER describe email subjects, senders, or content without tool data
+4. ALWAYS wait for tool results before responding about emails
+5. If a tool call fails, say "I couldn't access your emails" - don't make up data
 
-IMPORTANT RULES:
-- NEVER make up email content, IDs, or data
-- ALWAYS use MCP tools to get real email information
-- ALWAYS confirm actions before executing them
-- Provide clear feedback after each tool call
-- Use actual email IDs from tool responses, never invent them
+🎯 WORKFLOW:
+1. User mentions emails → STOP → Call appropriate tool → Wait for results → Then respond
+2. ALWAYS use real data from tool responses
+3. NEVER invent email IDs, subjects, senders, or dates
+4. Speak naturally about the REAL email data you receive
 
-Your key responsibilities:
-1. Use MCP tools to get REAL email data
-2. Read emails aloud with proper emphasis
-3. Draft replies based on actual email content
-4. Handle email organization using MCP tools
-5. Provide clear confirmations of all actions
+📅 DATE QUERY CONVERSION:
+When users mention dates, convert to Gmail query syntax:
+- "today" → "newer_than:1d"
+- "yesterday" → "older_than:1d newer_than:2d"  
+- "this week" → "newer_than:7d"
+- "last week" → "older_than:7d newer_than:14d"
+- "this month" → "newer_than:1m"
+- "January 2025" → "after:2025/01/01 before:2025/02/01"
+- "after January 15" → "after:2025/01/15"
+- "before December 1" → "before:2025/12/01"
+- "last 3 days" → "newer_than:3d"
 
-Always prioritize accuracy and ask for confirmation before sending emails or making changes.`
+🛡️ SAFETY:
+- Ask for confirmation before sending emails or making changes
+- Use actual email IDs from tool responses only
+- If unsure which tool to use, call list_emails first`
         }
       };
 
@@ -176,61 +202,9 @@ Always prioritize accuracy and ask for confirmation before sending emails or mak
         </div>
       )}
 
-      {summary && <EmailSummary summary={summary} emails={emails} />}
-      {lastAction && <EmailAction action={lastAction.action} result={lastAction.result} />}
+
     </div>
   );
 }
 
-function EmailSummary({ summary, emails }) {
-  return summary ? (
-    <div className="flex flex-col gap-3">
-      <div className="bg-blue-50 p-3 rounded-md">
-        <h3 className="font-semibold text-blue-800 mb-2">📧 Inbox Summary</h3>
-        <p className="text-sm text-blue-700">{summary.summary}</p>
-        <div className="flex gap-4 mt-2 text-xs text-blue-600">
-          <span>📬 Total: {summary.totalCount}</span>
-          <span>📭 Unread: {summary.unreadCount}</span>
-          <span>📰 Read: {summary.totalCount - summary.unreadCount}</span>
-        </div>
-      </div>
-      
-      {emails && emails.length > 0 && (
-        <div className="space-y-2">
-          <h4 className="font-semibold text-sm">Recent Emails:</h4>
-          {emails.slice(0, 5).map((email, index) => (
-            <div key={email.id} className="flex items-center gap-2 p-2 bg-gray-50 rounded text-xs">
-              <div className={`w-2 h-2 rounded-full ${email.unread ? 'bg-blue-500' : 'bg-gray-300'}`} />
-              <div className="flex-1 min-w-0">
-                <p className="font-medium truncate">{email.subject}</p>
-                <p className="text-gray-600 truncate">{email.from}</p>
-              </div>
-              <span className="text-gray-500 text-xs">{email.date}</span>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  ) : null;
-}
 
-function EmailAction({ action, result }) {
-  const icons = {
-    send_email: Send,
-    mark_email_read: Check,
-    delete_email: Trash2,
-    list_emails: Mail,
-    get_email_details: Mail
-  };
-  
-  const Icon = icons[action] || Mail;
-  
-  return (
-    <div className="flex items-center gap-2 p-2 bg-green-50 rounded-md">
-      <Icon size={16} className="text-green-600" />
-      <span className="text-sm text-green-700">
-        {action.replace('_', ' ')} completed via MCP
-      </span>
-    </div>
-  );
-}
