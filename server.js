@@ -5,12 +5,14 @@ import { createServer as createViteServer } from "vite";
 import dotenv from "dotenv";
 dotenv.config({ path: './config.env' });
 import EmailService from "./server/email-service.js";
+import CalendarService from "./api/_utils/calendar-service.js";
 import { google } from "googleapis";
 
 const app = express();
 const port = process.env.PORT || 3000;
 const apiKey = process.env.OPENAI_API_KEY;
 const emailService = new EmailService();
+const calendarService = new CalendarService();
 
 // Middleware
 app.use(express.json());
@@ -44,6 +46,7 @@ const getAuthUrl = () => {
       'https://www.googleapis.com/auth/gmail.readonly',
       'https://www.googleapis.com/auth/gmail.send',
       'https://www.googleapis.com/auth/gmail.modify',
+      'https://www.googleapis.com/auth/calendar.events',
       'https://mail.google.com/'
     ]
   });
@@ -92,11 +95,12 @@ app.get("/api/auth/callback", async (req, res) => {
     console.log('Session ID after:', req.sessionID);
     console.log('Session data:', req.session);
     
-    // Authenticate the email service
+    // Authenticate both services
     oauth2Client.setCredentials(tokens);
     await emailService.authenticateGmail(tokens);
+    await calendarService.authenticateGoogleCalendar(tokens);
     
-    console.log('Email service authenticated');
+    console.log('Email and calendar services authenticated');
     console.log('======================');
     
     // Redirect to home page
@@ -347,6 +351,182 @@ app.get("/api/mcp/list-tools", requireAuth, async (req, res) => {
           },
           required: ['emailId']
         }
+      },
+      {
+        name: 'create_event',
+        description: 'Create a new calendar event with optional Google Meet link',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            title: {
+              type: 'string',
+              description: 'Event title'
+            },
+            description: {
+              type: 'string',
+              description: 'Event description (optional)'
+            },
+            start_time: {
+              type: 'string',
+              description: 'Event start time in ISO 8601 format (e.g., "2024-01-15T14:30:00")'
+            },
+            end_time: {
+              type: 'string',
+              description: 'Event end time in ISO 8601 format (e.g., "2024-01-15T15:30:00")'
+            },
+            timezone: {
+              type: 'string',
+              description: 'Timezone for the event (e.g., "America/New_York"), defaults to UTC'
+            },
+            location: {
+              type: 'string',
+              description: 'Event location (optional)'
+            },
+            attendees: {
+              type: 'array',
+              items: {
+                type: 'string'
+              },
+              description: 'List of attendee email addresses (optional)'
+            },
+            create_meet_link: {
+              type: 'boolean',
+              description: 'Whether to create a Google Meet link for the event (optional)',
+              default: false
+            }
+          },
+          required: ['title', 'start_time', 'end_time']
+        }
+      },
+      {
+        name: 'list_events',
+        description: 'List upcoming calendar events',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            maxResults: {
+              type: 'number',
+              description: 'Maximum number of events to return (default: 10)',
+              default: 10
+            },
+            timeMin: {
+              type: 'string',
+              description: 'Start time to filter events (ISO 8601 format), defaults to now'
+            },
+            timeMax: {
+              type: 'string',
+              description: 'End time to filter events (ISO 8601 format), optional'
+            },
+            query: {
+              type: 'string',
+              description: 'Text query to filter events (optional)'
+            }
+          }
+        }
+      },
+      {
+        name: 'get_event_details',
+        description: 'Get detailed information about a specific calendar event',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            eventId: {
+              type: 'string',
+              description: 'Calendar event ID'
+            }
+          },
+          required: ['eventId']
+        }
+      },
+      {
+        name: 'update_event',
+        description: 'Update an existing calendar event',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            eventId: {
+              type: 'string',
+              description: 'Calendar event ID'
+            },
+            title: {
+              type: 'string',
+              description: 'Updated event title (optional)'
+            },
+            description: {
+              type: 'string',
+              description: 'Updated event description (optional)'
+            },
+            start_time: {
+              type: 'string',
+              description: 'Updated start time in ISO 8601 format (optional)'
+            },
+            end_time: {
+              type: 'string',
+              description: 'Updated end time in ISO 8601 format (optional)'
+            },
+            timezone: {
+              type: 'string',
+              description: 'Updated timezone (optional)'
+            },
+            location: {
+              type: 'string',
+              description: 'Updated location (optional)'
+            },
+            attendees: {
+              type: 'array',
+              items: {
+                type: 'string'
+              },
+              description: 'Updated list of attendee email addresses (optional)'
+            },
+            create_meet_link: {
+              type: 'boolean',
+              description: 'Whether to add a Google Meet link (optional)'
+            }
+          },
+          required: ['eventId']
+        }
+      },
+      {
+        name: 'delete_event',
+        description: 'Delete a calendar event',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            eventId: {
+              type: 'string',
+              description: 'Calendar event ID'
+            }
+          },
+          required: ['eventId']
+        }
+      },
+      {
+        name: 'search_events',
+        description: 'Search calendar events by keyword and date range',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            query: {
+              type: 'string',
+              description: 'Search query (keywords to search for in event titles and descriptions)'
+            },
+            maxResults: {
+              type: 'number',
+              description: 'Maximum number of events to return (default: 25)',
+              default: 25
+            },
+            timeMin: {
+              type: 'string',
+              description: 'Start time to filter events (ISO 8601 format), optional'
+            },
+            timeMax: {
+              type: 'string',
+              description: 'End time to filter events (ISO 8601 format), optional'
+            }
+          },
+          required: ['query']
+        }
       }
     ];
 
@@ -370,9 +550,14 @@ app.post("/api/mcp/call-tool", requireAuth, async (req, res) => {
       oauth2Client.setCredentials(req.session.tokens);
       await emailService.authenticateGmail(req.session.tokens);
     }
+    
+    if (!calendarService.isAuthenticated()) {
+      oauth2Client.setCredentials(req.session.tokens);
+      await calendarService.authenticateGoogleCalendar(req.session.tokens);
+    }
 
     // Execute the tool based on the tool name
-    const result = await executeMCPTool(tool_name, args, emailService);
+    const result = await executeMCPTool(tool_name, args, emailService, calendarService);
     
     res.json({
       content: [
@@ -396,7 +581,7 @@ app.post("/api/mcp/call-tool", requireAuth, async (req, res) => {
 });
 
 // MCP tool execution helper function
-async function executeMCPTool(toolName, args, emailService) {
+async function executeMCPTool(toolName, args, emailService, calendarService) {
   switch (toolName) {
     case 'list_emails':
       return await listEmails(args, emailService);
@@ -408,6 +593,18 @@ async function executeMCPTool(toolName, args, emailService) {
       return await markEmailRead(args, emailService);
     case 'delete_email':
       return await deleteEmail(args, emailService);
+    case 'create_event':
+      return await createEvent(args, calendarService);
+    case 'list_events':
+      return await listEvents(args, calendarService);
+    case 'get_event_details':
+      return await getEventDetails(args, calendarService);
+    case 'update_event':
+      return await updateEvent(args, calendarService);
+    case 'delete_event':
+      return await deleteEvent(args, calendarService);
+    case 'search_events':
+      return await searchEvents(args, calendarService);
     default:
       throw new Error(`Unknown tool: ${toolName}`);
   }
@@ -497,6 +694,69 @@ async function deleteEmail(args, emailService) {
     };
   } catch (error) {
     throw new Error(`Failed to delete email: ${error.message}`);
+  }
+}
+
+// Calendar helper functions
+async function createEvent(args, calendarService) {
+  try {
+    const result = await calendarService.createEvent(args);
+    return result;
+  } catch (error) {
+    throw new Error(`Failed to create calendar event: ${error.message}`);
+  }
+}
+
+async function listEvents(args, calendarService) {
+  try {
+    const result = await calendarService.listEvents(args);
+    return result;
+  } catch (error) {
+    throw new Error(`Failed to list calendar events: ${error.message}`);
+  }
+}
+
+async function getEventDetails(args, calendarService) {
+  const { eventId } = args;
+  
+  try {
+    const result = await calendarService.getEventDetails(eventId);
+    return result;
+  } catch (error) {
+    throw new Error(`Failed to get event details: ${error.message}`);
+  }
+}
+
+async function updateEvent(args, calendarService) {
+  const { eventId, ...updates } = args;
+  
+  try {
+    const result = await calendarService.updateEvent(eventId, updates);
+    return result;
+  } catch (error) {
+    throw new Error(`Failed to update calendar event: ${error.message}`);
+  }
+}
+
+async function deleteEvent(args, calendarService) {
+  const { eventId } = args;
+  
+  try {
+    const result = await calendarService.deleteEvent(eventId);
+    return result;
+  } catch (error) {
+    throw new Error(`Failed to delete calendar event: ${error.message}`);
+  }
+}
+
+async function searchEvents(args, calendarService) {
+  const { query, ...options } = args;
+  
+  try {
+    const result = await calendarService.searchEvents(query, options);
+    return result;
+  } catch (error) {
+    throw new Error(`Failed to search calendar events: ${error.message}`);
   }
 }
 

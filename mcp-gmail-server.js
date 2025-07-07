@@ -2,12 +2,13 @@ import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 import EmailService from './api/_utils/email-service.js';
+import CalendarService from './api/_utils/calendar-service.js';
 import fetch from 'node-fetch';
 
 class GmailMCPServer {
   constructor() {
     this.server = new Server({
-      name: 'gmail-mcp-server',
+      name: 'gmail-calendar-mcp-server',
       version: '1.0.0',
     }, {
       capabilities: {
@@ -16,6 +17,7 @@ class GmailMCPServer {
     });
 
     this.emailService = new EmailService();
+    this.calendarService = new CalendarService();
     this.setupToolHandlers();
   }
 
@@ -112,6 +114,182 @@ class GmailMCPServer {
               },
               required: ['emailId']
             }
+          },
+          {
+            name: 'create_event',
+            description: 'Create a new calendar event with optional Google Meet link',
+            inputSchema: {
+              type: 'object',
+              properties: {
+                title: {
+                  type: 'string',
+                  description: 'Event title'
+                },
+                description: {
+                  type: 'string',
+                  description: 'Event description (optional)'
+                },
+                start_time: {
+                  type: 'string',
+                  description: 'Event start time in ISO 8601 format (e.g., "2024-01-15T14:30:00")'
+                },
+                end_time: {
+                  type: 'string',
+                  description: 'Event end time in ISO 8601 format (e.g., "2024-01-15T15:30:00")'
+                },
+                timezone: {
+                  type: 'string',
+                  description: 'Timezone for the event (e.g., "America/New_York"), defaults to UTC'
+                },
+                location: {
+                  type: 'string',
+                  description: 'Event location (optional)'
+                },
+                attendees: {
+                  type: 'array',
+                  items: {
+                    type: 'string'
+                  },
+                  description: 'List of attendee email addresses (optional)'
+                },
+                create_meet_link: {
+                  type: 'boolean',
+                  description: 'Whether to create a Google Meet link for the event (optional)',
+                  default: false
+                }
+              },
+              required: ['title', 'start_time', 'end_time']
+            }
+          },
+          {
+            name: 'list_events',
+            description: 'List upcoming calendar events',
+            inputSchema: {
+              type: 'object',
+              properties: {
+                maxResults: {
+                  type: 'number',
+                  description: 'Maximum number of events to return (default: 10)',
+                  default: 10
+                },
+                timeMin: {
+                  type: 'string',
+                  description: 'Start time to filter events (ISO 8601 format), defaults to now'
+                },
+                timeMax: {
+                  type: 'string',
+                  description: 'End time to filter events (ISO 8601 format), optional'
+                },
+                query: {
+                  type: 'string',
+                  description: 'Text query to filter events (optional)'
+                }
+              }
+            }
+          },
+          {
+            name: 'get_event_details',
+            description: 'Get detailed information about a specific calendar event',
+            inputSchema: {
+              type: 'object',
+              properties: {
+                eventId: {
+                  type: 'string',
+                  description: 'Calendar event ID'
+                }
+              },
+              required: ['eventId']
+            }
+          },
+          {
+            name: 'update_event',
+            description: 'Update an existing calendar event',
+            inputSchema: {
+              type: 'object',
+              properties: {
+                eventId: {
+                  type: 'string',
+                  description: 'Calendar event ID'
+                },
+                title: {
+                  type: 'string',
+                  description: 'Updated event title (optional)'
+                },
+                description: {
+                  type: 'string',
+                  description: 'Updated event description (optional)'
+                },
+                start_time: {
+                  type: 'string',
+                  description: 'Updated start time in ISO 8601 format (optional)'
+                },
+                end_time: {
+                  type: 'string',
+                  description: 'Updated end time in ISO 8601 format (optional)'
+                },
+                timezone: {
+                  type: 'string',
+                  description: 'Updated timezone (optional)'
+                },
+                location: {
+                  type: 'string',
+                  description: 'Updated location (optional)'
+                },
+                attendees: {
+                  type: 'array',
+                  items: {
+                    type: 'string'
+                  },
+                  description: 'Updated list of attendee email addresses (optional)'
+                },
+                create_meet_link: {
+                  type: 'boolean',
+                  description: 'Whether to add a Google Meet link (optional)'
+                }
+              },
+              required: ['eventId']
+            }
+          },
+          {
+            name: 'delete_event',
+            description: 'Delete a calendar event',
+            inputSchema: {
+              type: 'object',
+              properties: {
+                eventId: {
+                  type: 'string',
+                  description: 'Calendar event ID'
+                }
+              },
+              required: ['eventId']
+            }
+          },
+          {
+            name: 'search_events',
+            description: 'Search calendar events by keyword and date range',
+            inputSchema: {
+              type: 'object',
+              properties: {
+                query: {
+                  type: 'string',
+                  description: 'Search query (keywords to search for in event titles and descriptions)'
+                },
+                maxResults: {
+                  type: 'number',
+                  description: 'Maximum number of events to return (default: 25)',
+                  default: 25
+                },
+                timeMin: {
+                  type: 'string',
+                  description: 'Start time to filter events (ISO 8601 format), optional'
+                },
+                timeMax: {
+                  type: 'string',
+                  description: 'End time to filter events (ISO 8601 format), optional'
+                }
+              },
+              required: ['query']
+            }
           }
         ]
       };
@@ -124,16 +302,17 @@ class GmailMCPServer {
         // Get authentication tokens from the running server
         const authResponse = await fetch('http://localhost:3000/api/auth/status');
         if (!authResponse.ok) {
-          throw new Error('Gmail authentication required. Please authenticate first.');
+          throw new Error('Google authentication required. Please authenticate first.');
         }
         
         const authData = await authResponse.json();
         if (!authData.authenticated) {
-          throw new Error('Gmail authentication required. Please authenticate first.');
+          throw new Error('Google authentication required. Please authenticate first.');
         }
 
-        // Authenticate the email service
+        // Authenticate both services
         await this.emailService.authenticateGmail(authData.tokens);
+        await this.calendarService.authenticateGoogleCalendar(authData.tokens);
 
         switch (name) {
           case 'list_emails':
@@ -146,6 +325,18 @@ class GmailMCPServer {
             return await this.markEmailRead(args);
           case 'delete_email':
             return await this.deleteEmail(args);
+          case 'create_event':
+            return await this.createEvent(args);
+          case 'list_events':
+            return await this.listEvents(args);
+          case 'get_event_details':
+            return await this.getEventDetails(args);
+          case 'update_event':
+            return await this.updateEvent(args);
+          case 'delete_event':
+            return await this.deleteEvent(args);
+          case 'search_events':
+            return await this.searchEvents(args);
           default:
             throw new Error(`Unknown tool: ${name}`);
         }
@@ -265,6 +456,117 @@ class GmailMCPServer {
       };
     } catch (error) {
       throw new Error(`Failed to delete email: ${error.message}`);
+    }
+  }
+
+  // Calendar event methods
+  async createEvent(args) {
+    try {
+      const result = await this.calendarService.createEvent(args);
+      
+      return {
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify(result, null, 2)
+          }
+        ]
+      };
+    } catch (error) {
+      throw new Error(`Failed to create calendar event: ${error.message}`);
+    }
+  }
+
+  async listEvents(args) {
+    try {
+      const result = await this.calendarService.listEvents(args);
+      
+      return {
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify(result, null, 2)
+          }
+        ]
+      };
+    } catch (error) {
+      throw new Error(`Failed to list calendar events: ${error.message}`);
+    }
+  }
+
+  async getEventDetails(args) {
+    const { eventId } = args;
+    
+    try {
+      const result = await this.calendarService.getEventDetails(eventId);
+      
+      return {
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify(result, null, 2)
+          }
+        ]
+      };
+    } catch (error) {
+      throw new Error(`Failed to get event details: ${error.message}`);
+    }
+  }
+
+  async updateEvent(args) {
+    const { eventId, ...updates } = args;
+    
+    try {
+      const result = await this.calendarService.updateEvent(eventId, updates);
+      
+      return {
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify(result, null, 2)
+          }
+        ]
+      };
+    } catch (error) {
+      throw new Error(`Failed to update calendar event: ${error.message}`);
+    }
+  }
+
+  async deleteEvent(args) {
+    const { eventId } = args;
+    
+    try {
+      const result = await this.calendarService.deleteEvent(eventId);
+      
+      return {
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify(result, null, 2)
+          }
+        ]
+      };
+    } catch (error) {
+      throw new Error(`Failed to delete calendar event: ${error.message}`);
+    }
+  }
+
+  async searchEvents(args) {
+    const { query, ...options } = args;
+    
+    try {
+      const result = await this.calendarService.searchEvents(query, options);
+      
+      return {
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify(result, null, 2)
+          }
+        ]
+      };
+    } catch (error) {
+      throw new Error(`Failed to search calendar events: ${error.message}`);
     }
   }
 
