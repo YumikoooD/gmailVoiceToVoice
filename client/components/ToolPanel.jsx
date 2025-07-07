@@ -26,7 +26,7 @@ const emailTools = [
       properties: {
         emailId: {
           type: "string",
-          description: "The REAL ID of the email to read (must be from previous get_inbox_summary call)"
+          description: "The REAL Gmail message ID (long alphanumeric string like '18d4f2c8b9a7e123') from previous get_inbox_summary call. NEVER use simple numbers like '1', '2', '3'."
         }
       },
       required: ["emailId"]
@@ -68,7 +68,7 @@ const emailTools = [
       properties: {
         emailId: {
           type: "string",
-          description: "The ID of the email"
+          description: "The REAL Gmail message ID (long alphanumeric string) from get_inbox_summary results. NEVER use simple numbers."
         },
         isRead: {
           type: "boolean",
@@ -87,7 +87,7 @@ const emailTools = [
       properties: {
         emailId: {
           type: "string",
-          description: "The ID of the email to delete"
+          description: "The REAL Gmail message ID (long alphanumeric string) from get_inbox_summary results. NEVER use simple numbers."
         }
       },
       required: ["emailId"]
@@ -102,7 +102,7 @@ const emailTools = [
       properties: {
         emailId: {
           type: "string",
-          description: "The ID of the email being replied to"
+          description: "The REAL Gmail message ID (long alphanumeric string) from get_inbox_summary results. NEVER use simple numbers."
         },
         replyType: {
           type: "string",
@@ -129,14 +129,27 @@ const sessionUpdate = {
 CRITICAL RULES - NEVER VIOLATE THESE:
 1. NEVER make up, invent, or hallucinate email content, senders, subjects, or dates
 2. ALWAYS use function calls to get real email data - never guess or assume
-3. If you don't have real data from a function call, say "I need to check your inbox first"
-4. NEVER describe emails that you haven't retrieved through function calls
+3. NEVER describe emails that you haven't retrieved through function calls
 
-REQUIRED BEHAVIOR:
-- When asked about emails (today, recent, unread, etc.), IMMEDIATELY call get_inbox_summary
-- When asked to read specific emails, FIRST get the inbox, THEN call read_email with real IDs
-- When asked about emails from specific dates, get the inbox and filter the real results
-- If no emails match the criteria, say "I don't see any emails matching that criteria"
+EMAIL ID VALIDATION RULES:
+- Gmail message IDs are ALWAYS long alphanumeric strings (e.g., "18d4f2c8b9a7e123")
+- NEVER use simple numbers like "1", "2", "3" as email IDs
+- ONLY use email IDs that you received from the get_inbox_summary function
+- If you don't have a valid email ID, call get_inbox_summary first
+
+REQUIRED WORKFLOW:
+1. User asks about emails → IMMEDIATELY call get_inbox_summary
+2. User asks to read specific email → FIRST call get_inbox_summary, THEN use the actual ID from the results
+3. User asks about "latest" or "last" email → get_inbox_summary, then use the first email's real ID
+4. User asks about "unread" emails → get_inbox_summary, then use real IDs of unread emails
+
+FUNCTION CALL RESPONSE RULE:
+- ALWAYS respond verbally after calling a function with what you found or accomplished
+- When you call get_inbox_summary, immediately tell the user what you found in their inbox
+- When you call read_email, read the email content aloud to the user
+- When you call send_email, confirm the email was sent
+- When you call mark_email_read or delete_email, confirm the action was completed
+- NEVER stay silent after a function call - always provide feedback about the results
 
 Your key responsibilities:
 1. Get REAL inbox data using functions before any email discussions
@@ -144,6 +157,7 @@ Your key responsibilities:
 3. Draft replies based on REAL email content from function calls
 4. Handle email organization using actual email IDs from function results
 5. Help achieve "Inbox Zero" through efficient email processing
+6. ALWAYS provide immediate verbal feedback after function calls
 
 Safety rules:
 - Ask for confirmation before sending emails or making major changes
@@ -275,6 +289,12 @@ export default function ToolPanel({
     }
   }, [events]);
 
+  // Helper function to validate email ID
+  const isValidEmailId = (emailId) => {
+    // Gmail message IDs are long alphanumeric strings, not simple numbers
+    return emailId && typeof emailId === 'string' && emailId.length > 10 && !/^[0-9]+$/.test(emailId);
+  };
+
   // Handle email function calls
   const handleEmailFunction = async (functionCall) => {
     const { name, arguments: args } = functionCall;
@@ -282,6 +302,13 @@ export default function ToolPanel({
     try {
       const parsedArgs = JSON.parse(args);
       let result = null;
+
+      // Validate email ID for functions that require it
+      if (['read_email', 'mark_email_read', 'delete_email', 'draft_email_reply'].includes(name)) {
+        if (!isValidEmailId(parsedArgs.emailId)) {
+          throw new Error(`Invalid email ID: "${parsedArgs.emailId}". Gmail message IDs are long alphanumeric strings, not simple numbers. Please call get_inbox_summary first to get real email IDs.`);
+        }
+      }
 
       switch (name) {
         case 'get_inbox_summary':
@@ -314,6 +341,11 @@ export default function ToolPanel({
         }
       });
 
+      // Prompt AI to generate response with the function result
+      sendClientEvent({
+        type: "response.create"
+      });
+
       setFunctionCallOutput({
         ...functionCall,
         result
@@ -329,6 +361,11 @@ export default function ToolPanel({
           call_id: functionCall.call_id,
           output: JSON.stringify({ error: error.message })
         }
+      });
+
+      // Prompt AI to generate response with the error
+      sendClientEvent({
+        type: "response.create"
       });
     }
   };
