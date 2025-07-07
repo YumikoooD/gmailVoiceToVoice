@@ -417,22 +417,31 @@ async function listEmails(args, emailService) {
   const { maxResults = 20, query } = args;
   
   try {
-    console.log('Listing emails with args:', args);
-    const emails = await emailService.getInboxEmails(maxResults, query);
-    const summary = emailService.generateEmailSummary(emails);
+    console.log('🔍 Listing emails with args:', args);
+    console.log('🔍 Email service authenticated:', emailService.isAuthenticated());
     
-    return {
+    const emails = await emailService.getInboxEmails(maxResults, query);
+    console.log('🔍 Retrieved emails:', emails.length);
+    
+    const summary = emailService.generateEmailSummary(emails);
+    console.log('🔍 Generated summary:', summary);
+    
+    const result = {
       summary,
       emails: emails.map(email => ({
         id: email.id,
         subject: email.subject,
         from: email.from,
         date: email.date,
-        isRead: email.isRead,
+        isRead: !email.unread, // Convert unread to isRead
         snippet: email.snippet
       }))
     };
+    
+    console.log('🔍 Returning result with', result.emails.length, 'emails');
+    return result;
   } catch (error) {
+    console.error('❌ listEmails error:', error);
     throw new Error(`Failed to list emails: ${error.message}`);
   }
 }

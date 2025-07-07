@@ -55,39 +55,45 @@ class EmailService {
     console.log(`Gmail API returned ${response.data.messages?.length || 0} messages`);
     
     for (const message of response.data.messages || []) {
-      const email = await gmail.users.messages.get({
-        userId: 'me',
-        id: message.id
-      });
-      
-      const headers = email.data.payload.headers;
-      const subject = headers.find(h => h.name === 'Subject')?.value || 'No Subject';
-      const from = headers.find(h => h.name === 'From')?.value || 'Unknown';
-      const date = headers.find(h => h.name === 'Date')?.value || '';
-      
-      console.log(`Processing email: "${subject}" from "${from}"`);
-      
-      // Only skip promotional emails (keep everything else)
-      if (this.isPromotionalEmail(email.data)) {
-        console.log(`  → Skipped: Promotional email`);
+      try {
+        const email = await gmail.users.messages.get({
+          userId: 'me',
+          id: message.id
+        });
+        
+        const headers = email.data.payload.headers;
+        const subject = headers.find(h => h.name === 'Subject')?.value || 'No Subject';
+        const from = headers.find(h => h.name === 'From')?.value || 'Unknown';
+        const date = headers.find(h => h.name === 'Date')?.value || '';
+        
+        console.log(`Processing email: "${subject}" from "${from}"`);
+        
+        // Only skip promotional emails (keep everything else)
+        if (this.isPromotionalEmail(email.data)) {
+          console.log(`  → Skipped: Promotional email`);
+          continue;
+        }
+        
+        console.log(`  → Added to results`);
+        
+        emails.push({
+          id: message.id,
+          subject,
+          from,
+          date: date ? this.formatDate(date) : 'Unknown',
+          snippet: email.data.snippet,
+          unread: email.data.labelIds?.includes('UNREAD') || false,
+          body: await this.extractEmailBody(email.data.payload)
+        });
+        
+        // Stop once we have enough personal emails
+        if (emails.length >= limit) {
+          break;
+        }
+      } catch (error) {
+        console.error(`Error processing email ${message.id}:`, error);
+        // Continue processing other emails
         continue;
-      }
-      
-      console.log(`  → Added to results`);
-      
-      emails.push({
-        id: message.id,
-        subject,
-        from,
-        date: date ? this.formatDate(date) : 'Unknown',
-        snippet: email.data.snippet,
-        unread: email.data.labelIds?.includes('UNREAD') || false,
-        body: await this.extractEmailBody(email.data.payload)
-      });
-      
-      // Stop once we have enough personal emails
-      if (emails.length >= limit) {
-        break;
       }
     }
     
@@ -251,6 +257,18 @@ class EmailService {
   // Check if authenticated
   isAuthenticated() {
     return this.activeProvider === 'gmail' && this.gmailAuth !== null;
+  }
+
+  // Check if email should be skipped (placeholder for future filtering)
+  shouldSkipEmail(emailData) {
+    // Currently no additional filtering beyond promotional emails
+    return this.isPromotionalEmail(emailData);
+  }
+
+  // Check if sender should be filtered out (placeholder for future filtering)
+  isUnwantedSender(from, headers) {
+    // Currently no sender filtering
+    return false;
   }
 }
 

@@ -97,7 +97,8 @@ When users mention dates, convert to Gmail query syntax:
         }
       };
 
-      console.log('Sending session update with MCP tools:', sessionUpdate);
+      console.log('📤 Sending session update with MCP tools:', sessionUpdate);
+      console.log('📤 Tools being sent:', openAITools);
       onToolsUpdate(sessionUpdate);
       sessionUpdateSent.current = true;
     }

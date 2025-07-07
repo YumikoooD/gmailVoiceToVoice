@@ -208,25 +208,179 @@ export default function App() {
     const handleMCPEvents = async () => {
       const mostRecentEvent = events[0];
       
-
+      // Debug logging for all events
+      console.log('🔍 Processing event:', mostRecentEvent.type, mostRecentEvent);
+      
+      // Extra debugging for any function-related events
+      if (mostRecentEvent.type.includes('function') || mostRecentEvent.type.includes('tool')) {
+        console.log('🔧 Found function/tool related event:', mostRecentEvent.type, mostRecentEvent);
+      }
       
       // Send MCP tools update when session is created (like original ToolPanel)
       if (mostRecentEvent.type === "session.created" && pendingSessionUpdate) {
-        console.log('Session created, sending MCP tools update');
+        console.log('🚀 Session created, sending MCP tools update:', pendingSessionUpdate);
         sendClientEvent(pendingSessionUpdate);
         setPendingSessionUpdate(null);
         return;
       }
       
-      // Look for response.done events with function calls
+      // Look for function call events - these might be in different event types
+      if (mostRecentEvent.type === "response.output_item.done" && mostRecentEvent.item?.type === "function_call") {
+        console.log('🔧 Function call in output_item.done:', mostRecentEvent.item);
+        
+        try {
+          const { name, arguments: args, call_id } = mostRecentEvent.item;
+          
+          console.log('🔧 MCP Function call detected:', name, 'with args:', args, 'call_id:', call_id);
+          
+          // Parse arguments if it's a string, otherwise use as-is
+          let parsedArgs = {};
+          if (typeof args === 'string') {
+            parsedArgs = JSON.parse(args || '{}');
+          } else if (args && typeof args === 'object') {
+            parsedArgs = args;
+          }
+          
+          // Call the MCP tool via HTTP API
+          const response = await fetch('/api/mcp/call-tool', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            credentials: 'include',
+            body: JSON.stringify({
+              tool_name: name,
+              arguments: parsedArgs
+            })
+          });
+          
+          if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+          }
+          
+          const result = await response.json();
+          console.log('✅ MCP tool result:', result);
+          
+          // Send the result back to the model
+          const resultEvent = {
+            type: 'conversation.item.create',
+            item: {
+              type: 'function_call_output',
+              call_id: call_id,
+              output: JSON.stringify(result)
+            }
+          };
+          
+          sendClientEvent(resultEvent);
+          sendClientEvent({ type: 'response.create' });
+          
+        } catch (error) {
+          console.error('❌ MCP tool call failed:', error);
+          
+          // Send error back to model
+          const errorEvent = {
+            type: 'conversation.item.create',
+            item: {
+              type: 'function_call_output',
+              call_id: mostRecentEvent.item.call_id,
+              output: JSON.stringify({ error: error.message })
+            }
+          };
+          
+          sendClientEvent(errorEvent);
+          sendClientEvent({ type: 'response.create' });
+        }
+        return;
+      }
+      
+      if (mostRecentEvent.type === "response.function_call_arguments.done") {
+        console.log('🔧 Function call arguments done:', mostRecentEvent);
+        
+        try {
+          const { name, arguments: args, call_id } = mostRecentEvent;
+          
+          console.log('🔧 MCP Function call detected:', name, 'with args:', args, 'call_id:', call_id);
+          
+          // Parse arguments if it's a string, otherwise use as-is
+          let parsedArgs = {};
+          if (typeof args === 'string') {
+            parsedArgs = JSON.parse(args || '{}');
+          } else if (args && typeof args === 'object') {
+            parsedArgs = args;
+          }
+          
+          // Call the MCP tool via HTTP API
+          const response = await fetch('/api/mcp/call-tool', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            credentials: 'include',
+            body: JSON.stringify({
+              tool_name: name,
+              arguments: parsedArgs
+            })
+          });
+          
+          if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+          }
+          
+          const result = await response.json();
+          console.log('MCP tool result:', result);
+          
+          // Send the result back to the model
+          const resultEvent = {
+            type: 'conversation.item.create',
+            item: {
+              type: 'function_call_output',
+              call_id: call_id,
+              output: JSON.stringify(result)
+            }
+          };
+          
+          sendClientEvent(resultEvent);
+          sendClientEvent({ type: 'response.create' });
+          
+        } catch (error) {
+          console.error('MCP tool call failed:', error);
+          
+          // Send error back to model
+          const errorEvent = {
+            type: 'conversation.item.create',
+            item: {
+              type: 'function_call_output',
+              call_id: mostRecentEvent.call_id,
+              output: JSON.stringify({ error: error.message })
+            }
+          };
+          
+          sendClientEvent(errorEvent);
+          sendClientEvent({ type: 'response.create' });
+        }
+        return;
+      }
+
+      // Also check response.done events with function calls in output
       if (mostRecentEvent.type === "response.done" && mostRecentEvent.response?.output) {
         console.log('Found response.done event with output:', mostRecentEvent.response.output);
         for (const output of mostRecentEvent.response.output) {
-          if (output.type === "function_call") {
-            console.log('🔧 MCP Function call detected:', output.name, 'with args:', output.arguments);
+          console.log('🔍 Checking output item:', output, 'type:', output.type, 'name:', output.name, 'arguments:', output.arguments);
+          
+          // Check for function call - the OpenAI Realtime API uses different field structures
+          if (output.type === "function_call" || (output.name && output.arguments !== undefined)) {
+            console.log('🔧 MCP Function call detected in response.done:', output.name, 'with args:', output.arguments);
             
             try {
               const { name, arguments: args, call_id } = output;
+              
+              // Parse arguments if it's a string, otherwise use as-is
+              let parsedArgs = {};
+              if (typeof args === 'string') {
+                parsedArgs = JSON.parse(args || '{}');
+              } else if (args && typeof args === 'object') {
+                parsedArgs = args;
+              }
               
               // Call the MCP tool via HTTP API
               const response = await fetch('/api/mcp/call-tool', {
@@ -237,7 +391,7 @@ export default function App() {
                 credentials: 'include',
                 body: JSON.stringify({
                   tool_name: name,
-                  arguments: JSON.parse(args || '{}')
+                  arguments: parsedArgs
                 })
               });
               
