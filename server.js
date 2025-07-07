@@ -72,16 +72,32 @@ app.get("/api/auth/login", (req, res) => {
 
 app.get("/api/auth/callback", async (req, res) => {
   try {
+    console.log('=== OAUTH CALLBACK ===');
+    console.log('Query params:', req.query);
+    console.log('Session ID before:', req.sessionID);
+    
     const { code } = req.query;
+    if (!code) {
+      console.log('ERROR: No code in callback');
+      return res.redirect('/login?error=no_code');
+    }
+    
     const { tokens } = await oauth2Client.getToken(code);
+    console.log('Tokens received:', tokens ? 'YES' : 'NO');
     
     // Store tokens in session
     req.session.tokens = tokens;
     req.session.authenticated = true;
     
+    console.log('Session ID after:', req.sessionID);
+    console.log('Session data:', req.session);
+    
     // Authenticate the email service
     oauth2Client.setCredentials(tokens);
     await emailService.authenticateGmail(tokens);
+    
+    console.log('Email service authenticated');
+    console.log('======================');
     
     // Redirect to home page
     res.redirect('/');
@@ -97,9 +113,18 @@ app.get("/api/auth/logout", (req, res) => {
 });
 
 app.get("/api/auth/status", (req, res) => {
+  console.log('=== AUTH STATUS CHECK ===');
+  console.log('Session ID:', req.sessionID);
+  console.log('Session data:', req.session);
+  console.log('Cookies received:', req.headers.cookie);
+  console.log('Session tokens present:', !!req.session.tokens);
+  console.log('Session authenticated:', req.session.authenticated);
+  console.log('========================');
+  
   res.json({
     authenticated: !!req.session.authenticated,
-    tokens: req.session.tokens ? 'present' : 'absent'
+    tokens: req.session.tokens ? 'present' : 'absent',
+    sessionId: req.sessionID
   });
 });
 
@@ -228,6 +253,242 @@ app.delete("/api/emails/:id", requireAuth, async (req, res) => {
     res.status(500).json({ error: "Failed to delete email" });
   }
 });
+
+// MCP API routes (protected)
+app.get("/api/mcp/list-tools", requireAuth, async (req, res) => {
+  try {
+    const tools = [
+      {
+        name: 'list_emails',
+        description: 'List recent emails from inbox with optional filtering',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            maxResults: {
+              type: 'number',
+              description: 'Maximum number of emails to return (default: 20)',
+              default: 20
+            },
+            query: {
+              type: 'string',
+              description: 'Gmail query syntax for filtering (e.g., "is:unread", "from:example@gmail.com")'
+            }
+          }
+        }
+      },
+      {
+        name: 'get_email_details',
+        description: 'Get detailed content of a specific email',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            emailId: {
+              type: 'string',
+              description: 'Gmail message ID'
+            }
+          },
+          required: ['emailId']
+        }
+      },
+      {
+        name: 'send_email',
+        description: 'Send a new email',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            to: {
+              type: 'string',
+              description: 'Recipient email address'
+            },
+            subject: {
+              type: 'string',
+              description: 'Email subject'
+            },
+            body: {
+              type: 'string',
+              description: 'Email body content'
+            },
+            replyToId: {
+              type: 'string',
+              description: 'ID of email being replied to (optional)'
+            }
+          },
+          required: ['to', 'subject', 'body']
+        }
+      },
+      {
+        name: 'mark_email_read',
+        description: 'Mark an email as read or unread',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            emailId: {
+              type: 'string',
+              description: 'Gmail message ID'
+            },
+            isRead: {
+              type: 'boolean',
+              description: 'Whether to mark as read (true) or unread (false)'
+            }
+          },
+          required: ['emailId', 'isRead']
+        }
+      },
+      {
+        name: 'delete_email',
+        description: 'Delete/trash an email',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            emailId: {
+              type: 'string',
+              description: 'Gmail message ID'
+            }
+          },
+          required: ['emailId']
+        }
+      }
+    ];
+
+    res.json({ tools });
+  } catch (error) {
+    console.error("List MCP tools error:", error);
+    res.status(500).json({ error: "Failed to list MCP tools" });
+  }
+});
+
+app.post("/api/mcp/call-tool", requireAuth, async (req, res) => {
+  try {
+    const { tool_name, arguments: args } = req.body;
+    
+    if (!tool_name) {
+      return res.status(400).json({ error: 'Tool name is required' });
+    }
+
+    // Re-authenticate with current session tokens
+    if (!emailService.isAuthenticated()) {
+      oauth2Client.setCredentials(req.session.tokens);
+      await emailService.authenticateGmail(req.session.tokens);
+    }
+
+    // Execute the tool based on the tool name
+    const result = await executeMCPTool(tool_name, args, emailService);
+    
+    res.json({
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify(result, null, 2)
+        }
+      ]
+    });
+  } catch (error) {
+    console.error("MCP tool call error:", error);
+    res.status(500).json({ 
+      content: [
+        {
+          type: 'text',
+          text: `Error: ${error.message}`
+        }
+      ]
+    });
+  }
+});
+
+// MCP tool execution helper function
+async function executeMCPTool(toolName, args, emailService) {
+  switch (toolName) {
+    case 'list_emails':
+      return await listEmails(args, emailService);
+    case 'get_email_details':
+      return await getEmailDetails(args, emailService);
+    case 'send_email':
+      return await sendEmail(args, emailService);
+    case 'mark_email_read':
+      return await markEmailRead(args, emailService);
+    case 'delete_email':
+      return await deleteEmail(args, emailService);
+    default:
+      throw new Error(`Unknown tool: ${toolName}`);
+  }
+}
+
+async function listEmails(args, emailService) {
+  const { maxResults = 20, query } = args;
+  
+  try {
+    const emails = await emailService.getInboxEmails(maxResults);
+    const summary = emailService.generateEmailSummary(emails);
+    
+    return {
+      summary,
+      emails: emails.map(email => ({
+        id: email.id,
+        subject: email.subject,
+        from: email.from,
+        date: email.date,
+        isRead: email.isRead,
+        snippet: email.snippet
+      }))
+    };
+  } catch (error) {
+    throw new Error(`Failed to list emails: ${error.message}`);
+  }
+}
+
+async function getEmailDetails(args, emailService) {
+  const { emailId } = args;
+  
+  try {
+    const email = await emailService.getEmailDetails(emailId);
+    return email;
+  } catch (error) {
+    throw new Error(`Failed to get email details: ${error.message}`);
+  }
+}
+
+async function sendEmail(args, emailService) {
+  const { to, subject, body, replyToId } = args;
+  
+  try {
+    const result = await emailService.sendEmail(to, subject, body, replyToId);
+    return {
+      success: true,
+      messageId: result.id,
+      message: 'Email sent successfully'
+    };
+  } catch (error) {
+    throw new Error(`Failed to send email: ${error.message}`);
+  }
+}
+
+async function markEmailRead(args, emailService) {
+  const { emailId, isRead } = args;
+  
+  try {
+    await emailService.markEmailAsRead(emailId, isRead);
+    return {
+      success: true,
+      message: `Email marked as ${isRead ? 'read' : 'unread'} successfully`
+    };
+  } catch (error) {
+    throw new Error(`Failed to mark email: ${error.message}`);
+  }
+}
+
+async function deleteEmail(args, emailService) {
+  const { emailId } = args;
+  
+  try {
+    await emailService.deleteEmail(emailId);
+    return {
+      success: true,
+      message: 'Email deleted successfully'
+    };
+  } catch (error) {
+    throw new Error(`Failed to delete email: ${error.message}`);
+  }
+}
 
 // Render the React client
 app.use("*", async (req, res, next) => {

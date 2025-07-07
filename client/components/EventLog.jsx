@@ -36,8 +36,18 @@ function Event({ event, timestamp }) {
 export default function EventLog({ events }) {
   const eventsToDisplay = [];
   let deltaEvents = {};
+  const seenEventIds = new Set();
 
-  events.forEach((event) => {
+  events.forEach((event, index) => {
+    // Create a unique identifier for deduplication
+    const uniqueId = `${event.event_id || 'no-id'}-${event.type}-${event.timestamp}`;
+    
+    // Skip if we've already seen this exact event
+    if (seenEventIds.has(uniqueId)) {
+      return;
+    }
+    seenEventIds.add(uniqueId);
+
     if (event.type.endsWith("delta")) {
       if (deltaEvents[event.type]) {
         // for now just log a single event per render pass
@@ -47,8 +57,11 @@ export default function EventLog({ events }) {
       }
     }
 
+    // Create a unique key that combines event_id with index to prevent React key conflicts
+    const uniqueKey = `${event.event_id || `event-${index}`}-${index}`;
+    
     eventsToDisplay.push(
-      <Event key={event.event_id} event={event} timestamp={event.timestamp} />,
+      <Event key={uniqueKey} event={event} timestamp={event.timestamp} />,
     );
   });
 

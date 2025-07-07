@@ -4,10 +4,9 @@ import { BrowserRouter } from "react-router-dom";
 import Router from "./components/Router";
 import "./base.css";
 
-ReactDOM.hydrateRoot(
-  document.getElementById("root"),
+ReactDOM.createRoot(document.getElementById("root")).render(
   <StrictMode>
-    <BrowserRouter>
+    <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
       <Router />
     </BrowserRouter>
   </StrictMode>,

@@ -1,15 +1,16 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import { LogOut } from "react-feather";
 import logo from "/assets/openai-logomark.svg";
 import EventLog from "./EventLog";
 import SessionControls from "./SessionControls";
-import ToolPanel from "./ToolPanel";
+import MCPToolPanel from "./MCPToolPanel";
 import Button from "./Button";
 
 export default function App() {
   const [isSessionActive, setIsSessionActive] = useState(false);
   const [events, setEvents] = useState([]);
   const [dataChannel, setDataChannel] = useState(null);
+  const [pendingSessionUpdate, setPendingSessionUpdate] = useState(null);
   const peerConnection = useRef(null);
   const audioElement = useRef(null);
 
@@ -102,8 +103,8 @@ export default function App() {
     peerConnection.current = null;
   }
 
-  // Send a message to the model
-  function sendClientEvent(message) {
+  // Send a message to the model - memoized to prevent infinite loops
+  const sendClientEvent = useCallback((message) => {
     if (dataChannel) {
       const timestamp = new Date().toLocaleTimeString();
       message.event_id = message.event_id || crypto.randomUUID();
@@ -115,17 +116,31 @@ export default function App() {
       if (!message.timestamp) {
         message.timestamp = timestamp;
       }
-      setEvents((prev) => [message, ...prev]);
+      
+      // Add event to the list, avoiding duplicates
+      setEvents((prev) => {
+        const eventExists = prev.some(event => 
+          event.event_id === message.event_id && 
+          event.type === message.type && 
+          event.timestamp === message.timestamp
+        );
+        
+        if (eventExists) {
+          return prev;
+        }
+        
+        return [message, ...prev];
+      });
     } else {
       console.error(
         "Failed to send message - no data channel available",
         message,
       );
     }
-  }
+  }, [dataChannel]);
 
-  // Send a text message to the model
-  function sendTextMessage(message) {
+  // Send a text message to the model - memoized to prevent infinite loops
+  const sendTextMessage = useCallback((message) => {
     const event = {
       type: "conversation.item.create",
       item: {
@@ -142,19 +157,40 @@ export default function App() {
 
     sendClientEvent(event);
     sendClientEvent({ type: "response.create" });
-  }
+  }, [sendClientEvent]);
+
+  // Handle MCP tools update - memoized to prevent infinite loops
+  const handleMCPToolsUpdate = useCallback((sessionUpdate) => {
+    console.log('Queueing MCP tools update for session.created event');
+    setPendingSessionUpdate(sessionUpdate);
+  }, []);
+
+
 
   // Attach event listeners to the data channel when a new one is created
   useEffect(() => {
     if (dataChannel) {
       // Append new server events to the list
-      dataChannel.addEventListener("message", (e) => {
+      dataChannel.addEventListener("message", async (e) => {
         const event = JSON.parse(e.data);
         if (!event.timestamp) {
           event.timestamp = new Date().toLocaleTimeString();
         }
 
-        setEvents((prev) => [event, ...prev]);
+        // Add server event to the list, avoiding duplicates
+        setEvents((prev) => {
+          const eventExists = prev.some(existingEvent => 
+            existingEvent.event_id === event.event_id && 
+            existingEvent.type === event.type && 
+            existingEvent.timestamp === event.timestamp
+          );
+          
+          if (eventExists) {
+            return prev;
+          }
+          
+          return [event, ...prev];
+        });
       });
 
       // Set session active when the data channel is opened
@@ -163,7 +199,92 @@ export default function App() {
         setEvents([]);
       });
     }
-  }, [dataChannel]);
+  }, [dataChannel, pendingSessionUpdate, sendClientEvent]);
+
+  // Handle MCP tool calls from events - separate effect to avoid dependency issues
+  useEffect(() => {
+    if (!events || events.length === 0) return;
+
+    const handleMCPEvents = async () => {
+      const mostRecentEvent = events[0];
+      
+      // Debug logging
+      console.log('Latest event:', mostRecentEvent);
+      
+      // Send MCP tools update when session is created (like original ToolPanel)
+      if (mostRecentEvent.type === "session.created" && pendingSessionUpdate) {
+        console.log('Session created, sending MCP tools update');
+        sendClientEvent(pendingSessionUpdate);
+        setPendingSessionUpdate(null);
+        return;
+      }
+      
+      // Look for response.done events with function calls
+      if (mostRecentEvent.type === "response.done" && mostRecentEvent.response?.output) {
+        console.log('Found response.done event with output:', mostRecentEvent.response.output);
+        for (const output of mostRecentEvent.response.output) {
+          if (output.type === "function_call") {
+            console.log('MCP Function call detected:', output);
+            
+            try {
+              const { name, arguments: args, call_id } = output;
+              
+              // Call the MCP tool via HTTP API
+              const response = await fetch('/api/mcp/call-tool', {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                },
+                credentials: 'include',
+                body: JSON.stringify({
+                  tool_name: name,
+                  arguments: JSON.parse(args || '{}')
+                })
+              });
+              
+              if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+              }
+              
+              const result = await response.json();
+              console.log('MCP tool result:', result);
+              
+              // Send the result back to the model
+              const resultEvent = {
+                type: 'conversation.item.create',
+                item: {
+                  type: 'function_call_output',
+                  call_id: call_id,
+                  output: JSON.stringify(result)
+                }
+              };
+              
+              sendClientEvent(resultEvent);
+              sendClientEvent({ type: 'response.create' });
+              
+            } catch (error) {
+              console.error('MCP tool call failed:', error);
+              
+              // Send error back to model
+              const errorEvent = {
+                type: 'conversation.item.create',
+                item: {
+                  type: 'function_call_output',
+                  call_id: output.call_id,
+                  output: JSON.stringify({ error: error.message })
+                }
+              };
+              
+              sendClientEvent(errorEvent);
+              sendClientEvent({ type: 'response.create' });
+            }
+          }
+        }
+      }
+    };
+
+    handleMCPEvents();
+  }, [events, sendClientEvent, pendingSessionUpdate]);
 
   return (
     <>
@@ -200,11 +321,8 @@ export default function App() {
           </section>
         </section>
         <section className="absolute top-0 w-[380px] right-0 bottom-0 p-4 pt-0 overflow-y-auto">
-          <ToolPanel
-            sendClientEvent={sendClientEvent}
-            sendTextMessage={sendTextMessage}
-            events={events}
-            isSessionActive={isSessionActive}
+          <MCPToolPanel
+            onToolsUpdate={handleMCPToolsUpdate}
           />
         </section>
       </main>

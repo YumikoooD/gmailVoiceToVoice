@@ -7,4 +7,10 @@ const path = fileURLToPath(import.meta.url);
 export default {
   root: join(dirname(path), "client"),
   plugins: [react()],
+  server: {
+    fs: {
+      strict: false,
+      allow: ['..']
+    }
+  }
 };
