@@ -1,4 +1,6 @@
 import { google } from 'googleapis';
+import EmailService from '../_utils/email-service.js';
+import { generateUserProfile } from '../_utils/user-profile.js';
 
 export default async function handler(req, res) {
   if (req.method !== 'GET') {
@@ -19,15 +21,28 @@ export default async function handler(req, res) {
     );
     
     const { tokens } = await oauth2Client.getToken(code);
-    
-    // For Vercel, we need to handle sessions differently
-    // Store tokens in a secure cookie with proper encoding
+
+    // ===== Auto-generate user profile =====
+    let profileCookie = '';
+    try {
+      const emailService = new EmailService();
+      await emailService.authenticateGmail(tokens);
+      const sentEmails = await emailService.getSentEmails(300);
+      const { userProfile } = generateUserProfile(sentEmails);
+      profileCookie = `user_profile=${encodeURIComponent(JSON.stringify(userProfile))}; Secure; SameSite=Lax; Max-Age=86400; Path=/`;
+    } catch (profileErr) {
+      console.error('Failed to generate user profile:', profileErr);
+    }
+
+    // Store tokens and auth flag in secure cookies
     const encodedTokens = encodeURIComponent(JSON.stringify(tokens));
-    res.setHeader('Set-Cookie', [
+    const cookies = [
       `gmail_tokens=${encodedTokens}; HttpOnly; Secure; SameSite=Strict; Max-Age=86400; Path=/`,
       `authenticated=true; HttpOnly; Secure; SameSite=Strict; Max-Age=86400; Path=/`
-    ]);
-    
+    ];
+    if (profileCookie) cookies.push(profileCookie);
+    res.setHeader('Set-Cookie', cookies);
+
     res.redirect('/');
   } catch (error) {
     console.error('OAuth callback error:', error);

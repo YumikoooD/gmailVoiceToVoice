@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useEffect, useRef, useState, useCallback, useMemo } from "react";
 import { LogOut } from "react-feather";
 import logo from "/assets/openai-logomark.svg";
 import EventLog from "./EventLog";
@@ -10,9 +10,50 @@ export default function App() {
   const [isSessionActive, setIsSessionActive] = useState(false);
   const [events, setEvents] = useState([]);
   const [dataChannel, setDataChannel] = useState(null);
-  const [pendingSessionUpdate, setPendingSessionUpdate] = useState(null);
+  const [pendingSessionUpdates, setPendingSessionUpdates] = useState([]);
+  const [userProfile, setUserProfile] = useState(null);
   const peerConnection = useRef(null);
   const audioElement = useRef(null);
+
+  // Fetch user profile once after mount
+  useEffect(() => {
+    fetch('/api/auth/status', { credentials: 'include' })
+      .then(r => r.json())
+      .then(d => setUserProfile(d.userProfile || null))
+      .catch(console.error);
+  }, []);
+
+  // Build personalised system prompt when profile is available
+  const personalisedSystemMessage = useMemo(() => {
+    if (!userProfile) return null;
+    const {
+      name, profession, email, tone, signature,
+      coworkers = [], hobbies = [], typicalAvailability = []
+    } = userProfile;
+
+    const text = `You are an AI assistant writing emails on behalf of ${name || 'the user'}.
+Profession: ${profession || 'unknown'}.
+Preferred tone: ${tone || 'neutral'}.
+User email address: ${email || 'unknown'}.
+Always end emails with:\n${signature || 'Best,\n<name>'}.
+
+Coworkers: ${coworkers.join(', ') || 'n/a'}.
+Hobbies / interests: ${hobbies.join(', ') || 'n/a'}.
+Typical availability: ${typicalAvailability.join(', ') || 'n/a'}.
+
+You may share the user's informations with the user if they ask.
+
+Follow these details when composing or replying.`;
+
+    return {
+      type: 'conversation.item.create',
+      item: {
+        type: 'message',
+        role: 'system',
+        content: [{ type: 'input_text', text }]
+      }
+    };
+  }, [userProfile]);
 
   // Logout function
   const handleLogout = async () => {
@@ -162,8 +203,11 @@ export default function App() {
   // Handle MCP tools update - memoized to prevent infinite loops
   const handleMCPToolsUpdate = useCallback((sessionUpdate) => {
     console.log('Queueing MCP tools update for session.created event');
-    setPendingSessionUpdate(sessionUpdate);
-  }, []);
+    const queue = [];
+    if (sessionUpdate) queue.push(sessionUpdate);
+    if (personalisedSystemMessage) queue.push(personalisedSystemMessage);
+    setPendingSessionUpdates(queue);
+  }, [personalisedSystemMessage]);
 
 
 
@@ -199,7 +243,7 @@ export default function App() {
         setEvents([]);
       });
     }
-  }, [dataChannel, pendingSessionUpdate, sendClientEvent]);
+  }, [dataChannel, pendingSessionUpdates, sendClientEvent]);
 
   // Handle MCP tool calls from events - separate effect to avoid dependency issues
   useEffect(() => {
@@ -217,10 +261,10 @@ export default function App() {
       }
       
       // Send MCP tools update when session is created (like original ToolPanel)
-      if (mostRecentEvent.type === "session.created" && pendingSessionUpdate) {
-        console.log('🚀 Session created, sending MCP tools update:', pendingSessionUpdate);
-        sendClientEvent(pendingSessionUpdate);
-        setPendingSessionUpdate(null);
+      if (mostRecentEvent.type === "session.created" && pendingSessionUpdates.length) {
+        console.log('🚀 Session created, sending queued session updates:', pendingSessionUpdates);
+        pendingSessionUpdates.forEach(msg => sendClientEvent(msg));
+        setPendingSessionUpdates([]);
         return;
       }
       
@@ -437,7 +481,7 @@ export default function App() {
     };
 
     handleMCPEvents();
-  }, [events, sendClientEvent, pendingSessionUpdate]);
+  }, [events, sendClientEvent, pendingSessionUpdates]);
 
   return (
     <>

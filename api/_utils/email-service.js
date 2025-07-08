@@ -260,6 +260,63 @@ class EmailService {
       summary: `You have ${unreadCount} unread emails out of ${totalCount} total emails in your inbox.`
     };
   }
+
+  // Get recently sent emails (for user profiling)
+  async getSentEmails(maxResults = 300) {
+    if (!this.gmailAuth) {
+      throw new Error('Not authenticated');
+    }
+
+    try {
+      const gmail = google.gmail({ version: 'v1', auth: this.gmailAuth });
+
+      // Fetch list of sent messages
+      const response = await gmail.users.messages.list({
+        userId: 'me',
+        q: 'in:sent',
+        maxResults
+      });
+
+      const messages = response.data.messages || [];
+      const emails = [];
+
+      for (const message of messages) {
+        try {
+          const details = await gmail.users.messages.get({
+            userId: 'me',
+            id: message.id,
+            format: 'full'
+          });
+
+          const headers = details.data.payload.headers;
+          const subject = headers.find(h => h.name === 'Subject')?.value || '';
+          const to = headers.find(h => h.name === 'To')?.value || '';
+          const from = headers.find(h => h.name === 'From')?.value || '';
+          const date = headers.find(h => h.name === 'Date')?.value || '';
+
+          // Extract body (plain-text part preferred)
+          let body = '';
+          if (details.data.payload.body && details.data.payload.body.data) {
+            body = Buffer.from(details.data.payload.body.data, 'base64').toString();
+          } else if (details.data.payload.parts) {
+            const textPart = details.data.payload.parts.find(p => p.mimeType === 'text/plain');
+            if (textPart?.body?.data) {
+              body = Buffer.from(textPart.body.data, 'base64').toString();
+            }
+          }
+
+          emails.push({ to, from, subject, body, date });
+        } catch (err) {
+          console.error('Error fetching sent message', message.id, err);
+        }
+      }
+
+      return emails;
+    } catch (error) {
+      console.error('Error fetching sent emails:', error);
+      throw error;
+    }
+  }
 }
 
 export default EmailService; 

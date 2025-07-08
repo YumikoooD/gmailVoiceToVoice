@@ -87,17 +87,29 @@ app.get("/api/auth/callback", async (req, res) => {
     
     const { tokens } = await oauth2Client.getToken(code);
     console.log('Tokens received:', tokens ? 'YES' : 'NO');
-    
-    // Store tokens in session
-    req.session.tokens = tokens;
-    req.session.authenticated = true;
-    
-    console.log('Session ID after:', req.sessionID);
-    console.log('Session data:', req.session);
-    
-    // Authenticate both services
-    oauth2Client.setCredentials(tokens);
-    await emailService.authenticateGmail(tokens);
+ 
+     // Store tokens in session
+     req.session.tokens = tokens;
+     req.session.authenticated = true;
+
+    // Auto-generate user profile from recent sent emails
+    try {
+      await emailService.authenticateGmail(tokens);
+      const sentEmails = await emailService.getSentEmails(300);
+      const { generateUserProfile } = await import('./api/_utils/user-profile.js');
+      const { userProfile } = generateUserProfile(sentEmails);
+      req.session.userProfile = userProfile;
+      console.log('User profile generated and stored in session');
+    } catch (profileErr) {
+      console.error('Failed to generate user profile:', profileErr);
+    }
+ 
+     console.log('Session ID after:', req.sessionID);
+     console.log('Session data:', req.session);
+ 
+     // Authenticate both services
+     oauth2Client.setCredentials(tokens);
+    await emailService.authenticateGmail(req.session.tokens);
     await calendarService.authenticateGoogleCalendar(tokens);
     
     console.log('Email and calendar services authenticated');
@@ -128,7 +140,8 @@ app.get("/api/auth/status", (req, res) => {
   res.json({
     authenticated: !!req.session.authenticated,
     tokens: req.session.tokens ? 'present' : 'absent',
-    sessionId: req.sessionID
+    sessionId: req.sessionID,
+    userProfile: req.session.userProfile || null
   });
 });
 

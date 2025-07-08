@@ -176,6 +176,49 @@ class EmailService {
     return { success: true };
   }
 
+  // Fetch recently sent emails (used for behavioural profiling)
+  async getSentEmails(limit = 300) {
+    if (this.activeProvider !== 'gmail') {
+      throw new Error('Gmail not authenticated');
+    }
+
+    const gmail = google.gmail({ version: 'v1', auth: this.gmailAuth });
+
+    const response = await gmail.users.messages.list({
+      userId: 'me',
+      q: 'in:sent',
+      maxResults: limit
+    });
+
+    const messages = response.data.messages || [];
+    const emails = [];
+
+    for (const message of messages) {
+      try {
+        const details = await gmail.users.messages.get({
+          userId: 'me',
+          id: message.id,
+          format: 'full'
+        });
+
+        const headers = details.data.payload.headers;
+        const subject = headers.find(h => h.name === 'Subject')?.value || '';
+        const to = headers.find(h => h.name === 'To')?.value || '';
+        const from = headers.find(h => h.name === 'From')?.value || '';
+        const date = headers.find(h => h.name === 'Date')?.value || '';
+
+        // Use existing helper to extract plain text body
+        const body = await this.extractEmailBody(details.data.payload);
+
+        emails.push({ to, from, subject, body, date });
+      } catch (error) {
+        console.error(`Error fetching sent message ${message.id}:`, error);
+      }
+    }
+
+    return emails;
+  }
+ 
   // Get specific email details
   async getEmailDetails(emailId) {
     if (this.activeProvider !== 'gmail') {
