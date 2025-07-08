@@ -296,7 +296,8 @@ Follow these details when composing or replying.`;
           }
           
           // Call the MCP tool via HTTP API
-          const response = await fetch('/api/mcp/call-tool', {
+          const callToolEndpoint = import.meta.env.DEV ? '/api/mcp/call-tool' : '/api/mcp?action=call-tool';
+          const response = await fetch(callToolEndpoint, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
@@ -371,7 +372,8 @@ Follow these details when composing or replying.`;
           }
           
           // Call the MCP tool via HTTP API
-          const response = await fetch('/api/mcp/call-tool', {
+          const callToolEndpoint = import.meta.env.DEV ? '/api/mcp/call-tool' : '/api/mcp?action=call-tool';
+          const response = await fetch(callToolEndpoint, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
@@ -451,7 +453,8 @@ Follow these details when composing or replying.`;
               }
               
               // Call the MCP tool via HTTP API
-              const response = await fetch('/api/mcp/call-tool', {
+              const callToolEndpoint = import.meta.env.DEV ? '/api/mcp/call-tool' : '/api/mcp?action=call-tool';
+              const response = await fetch(callToolEndpoint, {
                 method: 'POST',
                 headers: {
                   'Content-Type': 'application/json',

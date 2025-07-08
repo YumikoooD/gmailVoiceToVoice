@@ -35,7 +35,8 @@ export function useSimpleMCPClient() {
         }
 
         // User is authenticated, now load MCP tools
-        const toolsResponse = await fetch('/api/mcp/list-tools', {
+        const listToolsEndpoint = import.meta.env.DEV ? '/api/mcp/list-tools' : '/api/mcp?action=list-tools';
+        const toolsResponse = await fetch(listToolsEndpoint, {
           credentials: 'include'
         });
         
