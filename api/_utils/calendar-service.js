@@ -106,7 +106,26 @@ class CalendarService {
 
       const createdEvent = response.data;
       
-      // Format response
+      // Google can take a moment to generate the Meet link; if it is missing, poll a
+      // couple of times (with short back-off) to retrieve the updated event until
+      // the link becomes available, or give up after 3 attempts.
+
+      let meetLink = createdEvent.conferenceData?.entryPoints?.find(ep => ep.uri)?.uri || null;
+
+      if (eventData.create_meet_link && !meetLink) {
+        const calendar = google.calendar({ version: 'v3', auth: this.calendarAuth });
+        for (let i = 0; i < 3 && !meetLink; i++) {
+          // wait 1 second before retrying
+          await new Promise(r => setTimeout(r, 1000));
+          const fresh = await calendar.events.get({
+            calendarId: 'primary',
+            eventId: createdEvent.id,
+            conferenceDataVersion: 1,
+          });
+          meetLink = fresh.data.conferenceData?.entryPoints?.find(ep => ep.uri)?.uri || null;
+        }
+      }
+
       const result = {
         id: createdEvent.id,
         title: createdEvent.summary,
@@ -116,7 +135,7 @@ class CalendarService {
         end_time: createdEvent.end.dateTime,
         timezone: createdEvent.start.timeZone,
         attendees: createdEvent.attendees?.map(a => a.email) || [],
-        meet_link: createdEvent.conferenceData?.entryPoints?.[0]?.uri || null,
+        meet_link: meetLink,
         calendar_link: createdEvent.htmlLink,
         status: createdEvent.status,
         created: format(new Date(createdEvent.created), 'MMM d, yyyy h:mm a')
@@ -176,7 +195,7 @@ class CalendarService {
         end_time: event.end.dateTime || event.end.date,
         timezone: event.start.timeZone,
         attendees: event.attendees?.map(a => a.email) || [],
-        meet_link: event.conferenceData?.entryPoints?.[0]?.uri || null,
+        meet_link: event.conferenceData?.entryPoints?.find(ep => ep.uri)?.uri || null,
         calendar_link: event.htmlLink,
         status: event.status,
         created_by: event.creator?.email || 'Unknown'
@@ -222,7 +241,7 @@ class CalendarService {
           status: a.responseStatus,
           optional: a.optional || false
         })) || [],
-        meet_link: event.conferenceData?.entryPoints?.[0]?.uri || null,
+        meet_link: event.conferenceData?.entryPoints?.find(ep => ep.uri)?.uri || null,
         calendar_link: event.htmlLink,
         status: event.status,
         created_by: event.creator?.email || 'Unknown',
@@ -308,7 +327,7 @@ class CalendarService {
         end_time: event.end.dateTime,
         timezone: event.start.timeZone,
         attendees: event.attendees?.map(a => a.email) || [],
-        meet_link: event.conferenceData?.entryPoints?.[0]?.uri || null,
+        meet_link: event.conferenceData?.entryPoints?.find(ep => ep.uri)?.uri || null,
         calendar_link: event.htmlLink,
         status: event.status,
         updated: format(new Date(event.updated), 'MMM d, yyyy h:mm a')
@@ -394,7 +413,7 @@ class CalendarService {
         end_time: event.end.dateTime || event.end.date,
         timezone: event.start.timeZone,
         attendees: event.attendees?.map(a => a.email) || [],
-        meet_link: event.conferenceData?.entryPoints?.[0]?.uri || null,
+        meet_link: event.conferenceData?.entryPoints?.find(ep => ep.uri)?.uri || null,
         calendar_link: event.htmlLink,
         status: event.status,
         created_by: event.creator?.email || 'Unknown'
