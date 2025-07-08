@@ -196,6 +196,31 @@ export function generateUserProfile(emails = []) {
     primaryEmail = Object.entries(emailCounts).sort((a,b)=>b[1]-a[1])[0][0];
   }
 
+  /* -------- Detailed contacts (name ↔ email) -------- */
+  const contactsMap = {};
+  emails.forEach(e => {
+    const recipients = Array.isArray(e.to) ? e.to : [e.to];
+    recipients.forEach(r => {
+      if (!r) return;
+      // Extract display name and email address
+      const nameMatch = r.match(/^"?([^<"]+)"?\s*</);
+      const emailMatch = r.match(/<([^>]+)>/) || r.match(/([A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+)/);
+      const address = emailMatch ? emailMatch[1] || emailMatch[0] : null;
+      const displayName = nameMatch ? nameMatch[1].trim() : null;
+      if (address) {
+        const key = (displayName || address).toLowerCase();
+        if (!contactsMap[key]) {
+          contactsMap[key] = address;
+        }
+      }
+    });
+  });
+
+  const contacts = Object.entries(contactsMap).map(([nameKey, email]) => ({
+    name: nameKey,
+    email
+  }));
+
   return {
     userProfile: {
       name,
@@ -207,7 +232,8 @@ export function generateUserProfile(emails = []) {
       coworkers,
       typicalAvailability,
       hobbies,
-      commonEmailIntents
+      commonEmailIntents,
+      contacts // detailed mapping
     }
   };
 } 

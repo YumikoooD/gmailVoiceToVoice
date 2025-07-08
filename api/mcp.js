@@ -287,6 +287,14 @@ export default async function handler(req, res) {
             },
             required: ['query']
           }
+        },
+        {
+          name: 'get_user_profile',
+          description: 'Retrieve the current user\'s profile including contacts list for name→email resolution',
+          inputSchema: {
+            type: 'object',
+            properties: {}
+          }
         }
       ];
 
@@ -306,7 +314,7 @@ export default async function handler(req, res) {
       await authenticateServices(cookies);
 
       // Execute the tool
-      const result = await executeTool(tool_name, args);
+      const result = await executeTool(tool_name, args, cookies);
       
       return res.json(result);
     }
@@ -318,14 +326,14 @@ export default async function handler(req, res) {
   }
 }
 
-async function executeTool(toolName, args) {
+async function executeTool(toolName, args, cookies) {
   switch (toolName) {
     case 'list_emails':
       return await listEmails(args);
     case 'get_email_details':
       return await getEmailDetails(args);
     case 'send_email':
-      return await sendEmail(args);
+      return await sendEmail(args, cookies);
     case 'mark_email_read':
       return await markEmailRead(args);
     case 'delete_email':
@@ -342,6 +350,8 @@ async function executeTool(toolName, args) {
       return await deleteEvent(args);
     case 'search_events':
       return await searchEvents(args);
+    case 'get_user_profile':
+      return await getUserProfile(cookies);
     default:
       throw new Error(`Unknown tool: ${toolName}`);
   }
@@ -372,8 +382,67 @@ async function getEmailDetails(args) {
   return email;
 }
 
-async function sendEmail(args) {
-  const { to, subject, body, replyToId } = args;
+async function sendEmail(args, cookies) {
+  let { to, subject, body, replyToId } = args;
+
+  // Helper: resolve name → email using user_profile cookie or sent mail history
+  const resolveEmail = async (name) => {
+    // 1) From user_profile cookie (if present)
+    try {
+      if (cookies.user_profile) {
+        const profile = JSON.parse(decodeURIComponent(cookies.user_profile));
+        const contacts = profile.contacts || [];
+        // Exact name match
+        const exact = contacts.find(c => c.name.toLowerCase() === name.toLowerCase());
+        if (exact) return exact.email;
+        // Partial match on name
+        const partial = contacts.find(c => name.toLowerCase().split(' ').every(p=>c.name.includes(p)));
+        if (partial) return partial.email;
+        // Fallback frequentContacts list
+        const candidates = profile.frequentContacts || [];
+        const matched = candidates.find((e) => e.toLowerCase().includes(name.toLowerCase()));
+        if (matched) return matched;
+      }
+    } catch (e) {
+      console.error('Failed to parse user_profile cookie', e);
+    }
+
+    // 2) Fallback: scan recently sent emails for addresses containing the name
+    try {
+      const sent = await emailService.getSentEmails(200);
+      const emailCounts = {};
+      sent.forEach((mail) => {
+        if (!mail.to) return;
+        const recipients = Array.isArray(mail.to) ? mail.to : [mail.to];
+        recipients.forEach((addr) => {
+          if (addr.toLowerCase().includes(name.toLowerCase())) {
+            emailCounts[addr] = (emailCounts[addr] || 0) + 1;
+          }
+        });
+      });
+      if (Object.keys(emailCounts).length) {
+        // Return most common match
+        return Object.entries(emailCounts).sort((a,b)=>b[1]-a[1])[0][0];
+      }
+    } catch (e) {
+      console.error('Failed to scan sent emails for contacts', e);
+    }
+
+    return null;
+  };
+
+  if (!to) {
+    throw new Error('"to" parameter is required');
+  }
+
+  if (!to.includes('@')) {
+    const resolved = await resolveEmail(to);
+    if (!resolved) {
+      throw new Error(`Could not resolve email address for recipient "${to}"`);
+    }
+    to = resolved;
+  }
+
   const result = await emailService.sendEmail(to, subject, body, replyToId);
   return result;
 }
@@ -417,4 +486,15 @@ async function deleteEvent(args) {
 async function searchEvents(args) {
   const { query, ...options } = args;
   return await calendarService.searchEvents(query, options);
+} 
+
+async function getUserProfile(cookies) {
+  if (!cookies.user_profile) {
+    throw new Error('User profile not available. Please log in again.');
+  }
+  try {
+    return JSON.parse(decodeURIComponent(cookies.user_profile));
+  } catch (e) {
+    throw new Error('Failed to parse stored user profile');
+  }
 } 

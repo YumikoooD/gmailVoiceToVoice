@@ -29,7 +29,8 @@ export default function App() {
     if (!userProfile) return null;
     const {
       name, profession, email, tone, signature,
-      coworkers = [], hobbies = [], typicalAvailability = []
+      coworkers = [], hobbies = [], typicalAvailability = [],
+      frequentContacts = [], contacts = []
     } = userProfile;
 
     const text = `You are an AI assistant writing emails on behalf of ${name || 'the user'}.
@@ -41,6 +42,11 @@ Always end emails with:\n${signature || 'Best,\n<name>'}.
 Coworkers: ${coworkers.join(', ') || 'n/a'}.
 Hobbies / interests: ${hobbies.join(', ') || 'n/a'}.
 Typical availability: ${typicalAvailability.join(', ') || 'n/a'}.
+
+Frequent contacts: ${frequentContacts.join(', ') || 'n/a'}.
+
+Address book (name → email):
+${contacts.slice(0, 30).map(c => `- ${c.name}: ${c.email}`).join('\n') || 'n/a'}.
 
 You may share the user's informations with the user if they ask.
 
