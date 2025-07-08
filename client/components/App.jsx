@@ -14,6 +14,7 @@ export default function App() {
   const [userProfile, setUserProfile] = useState(null);
   const peerConnection = useRef(null);
   const audioElement = useRef(null);
+  const processedCallIds = useRef(new Set());
 
   // Fetch user profile once after mount
   useEffect(() => {
@@ -239,6 +240,8 @@ Follow these details when composing or replying.`;
 
       // Set session active when the data channel is opened
       dataChannel.addEventListener("open", () => {
+        // Clear processed call IDs for a fresh session
+        processedCallIds.current = new Set();
         setIsSessionActive(true);
         setEvents([]);
       });
@@ -275,6 +278,13 @@ Follow these details when composing or replying.`;
         try {
           const { name, arguments: args, call_id } = mostRecentEvent.item;
           
+          // Skip if we've already handled this call_id to avoid duplicates
+          if (processedCallIds.current.has(call_id)) {
+            console.log('⏩ Skipping already processed call_id', call_id);
+            return;
+          }
+          processedCallIds.current.add(call_id);
+
           console.log('🔧 MCP Function call detected:', name, 'with args:', args, 'call_id:', call_id);
           
           // Parse arguments if it's a string, otherwise use as-is
@@ -343,6 +353,13 @@ Follow these details when composing or replying.`;
         try {
           const { name, arguments: args, call_id } = mostRecentEvent;
           
+          // Skip if we've already handled this call_id to avoid duplicates
+          if (processedCallIds.current.has(call_id)) {
+            console.log('⏩ Skipping already processed call_id', call_id);
+            return;
+          }
+          processedCallIds.current.add(call_id);
+
           console.log('🔧 MCP Function call detected:', name, 'with args:', args, 'call_id:', call_id);
           
           // Parse arguments if it's a string, otherwise use as-is
@@ -418,6 +435,13 @@ Follow these details when composing or replying.`;
             try {
               const { name, arguments: args, call_id } = output;
               
+              // Skip if we've already handled this call_id to avoid duplicates
+              if (processedCallIds.current.has(call_id)) {
+                console.log('⏩ Skipping already processed call_id', call_id);
+                continue;
+              }
+              processedCallIds.current.add(call_id);
+
               // Parse arguments if it's a string, otherwise use as-is
               let parsedArgs = {};
               if (typeof args === 'string') {
