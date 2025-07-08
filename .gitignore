@@ -5,7 +5,6 @@ yarn-debug.log*
 yarn-error.log*
 
 openai-realtime-console
-mcp-server
 
 # Sensitive files
 credentials.json
