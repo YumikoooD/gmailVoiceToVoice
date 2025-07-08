@@ -120,9 +120,12 @@ class EmailService {
   async sendGmailEmail(to, subject, body, replyToId, cc) {
     const gmail = google.gmail({ version: 'v1', auth: this.gmailAuth });
     
+    // Encode subject if contains non-ASCII
+    const encodeHeader = (val) => /[^\x00-\x7F]/.test(val) ? `=?UTF-8?B?${Buffer.from(val, 'utf8').toString('base64')}?=` : val;
+ 
     const emailLines = [
       `To: ${to}`,
-      `Subject: ${subject}`,
+      `Subject: ${encodeHeader(subject)}`,
       ...(cc ? [`Cc: ${Array.isArray(cc)? cc.join(', '): cc}`] : []),
       'Content-Type: text/plain; charset="UTF-8"',
       '',

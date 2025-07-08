@@ -178,7 +178,10 @@ class EmailService {
 
     const gmail = google.gmail({ version: 'v1', auth: this.gmailAuth });
     
-    let headers = `To: ${to}\r\nSubject: ${subject}\r\n`;
+    // Helper to encode non-ASCII header values per RFC 2047
+    const encodeHeader = (val) => /[^\x00-\x7F]/.test(val) ? `=?UTF-8?B?${Buffer.from(val, 'utf8').toString('base64')}?=` : val;
+ 
+    let headers = `To: ${to}\r\nSubject: ${encodeHeader(subject)}\r\nContent-Type: text/plain; charset="UTF-8"\r\n`;
     if (cc) {
       const ccLine = Array.isArray(cc) ? cc.join(', ') : cc;
       headers += `Cc: ${ccLine}\r\n`;
