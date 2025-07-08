@@ -11,12 +11,29 @@ function parseCookies(cookieString) {
   if (cookieString) {
     cookieString.split(';').forEach(cookie => {
       const [key, value] = cookie.trim().split('=');
-      if (key && value) {
+      if (key && value !== undefined) {
         cookies[key] = value;
       }
     });
   }
   return cookies;
+}
+
+// Helper to parse and stringify read_ids list stored in cookie
+function getReadIds(cookies) {
+  if (!cookies.read_ids) return [];
+  try {
+    return JSON.parse(decodeURIComponent(cookies.read_ids));
+  } catch {
+    return [];
+  }
+}
+
+function setReadIdsHeader(res, ids) {
+  try {
+    const encoded = encodeURIComponent(JSON.stringify(ids.slice(-100)));
+    res.setHeader('Set-Cookie', `read_ids=${encoded}; HttpOnly; Secure; SameSite=Strict; Max-Age=2592000; Path=/`);
+  } catch {}
 }
 
 // Helper function to authenticate services
@@ -77,6 +94,11 @@ export default async function handler(req, res) {
               emailId: {
                 type: 'string',
                 description: 'Email ID to get details for'
+              },
+              mark_as_read: {
+                type: 'boolean',
+                description: 'Whether to mark this email as read after fetching',
+                default: false
               }
             },
             required: ['emailId']
@@ -318,8 +340,17 @@ export default async function handler(req, res) {
       const cookies = parseCookies(req.headers.cookie);
       await authenticateServices(cookies);
 
+      const readIds = getReadIds(cookies);
       // Execute the tool
-      const result = await executeTool(tool_name, args, cookies);
+      const result = await executeTool(tool_name, args, cookies, readIds, res);
+
+      // If tool is get_email_details, store email id as read
+      if (tool_name === 'get_email_details' && result && result.id) {
+        if (!readIds.includes(result.id)) {
+          readIds.push(result.id);
+          setReadIdsHeader(res, readIds);
+        }
+      }
       
       return res.json(result);
     }
@@ -331,10 +362,10 @@ export default async function handler(req, res) {
   }
 }
 
-async function executeTool(toolName, args, cookies) {
+async function executeTool(toolName, args, cookies, readIds = [], res) {
   switch (toolName) {
     case 'list_emails':
-      return await listEmails(args);
+      return await listEmails(args, readIds);
     case 'get_email_details':
       return await getEmailDetails(args);
     case 'send_email':
@@ -363,14 +394,16 @@ async function executeTool(toolName, args, cookies) {
 }
 
 // Email helper functions
-async function listEmails(args) {
+async function listEmails(args, readIds) {
   const { maxResults = 20, query } = args;
-  const emails = await emailService.getInboxEmails(maxResults, query);
-  const summary = emailService.generateEmailSummary(emails);
+  const emails = await emailService.getInboxEmails(maxResults + readIds.length, query);
+  // filter out already read ids
+  const filtered = emails.filter(e => !readIds.includes(e.id)).slice(0, maxResults);
+  const summary = emailService.generateEmailSummary(filtered);
   
   return {
     summary,
-    emails: emails.map(email => ({
+    emails: filtered.map(email => ({
       id: email.id,
       subject: email.subject,
       from: email.from,
@@ -382,8 +415,17 @@ async function listEmails(args) {
 }
 
 async function getEmailDetails(args) {
-  const { emailId } = args;
+  const { emailId, mark_as_read = true } = args;
   const email = await emailService.getEmailDetails(emailId);
+  // Automatically mark as read unless disabled
+  if (mark_as_read) {
+    try {
+      await emailService.markEmailAsRead(emailId, true);
+      email.isRead = true;
+    } catch (e) {
+      console.error('Failed to mark email as read', e);
+    }
+  }
   return email;
 }
 

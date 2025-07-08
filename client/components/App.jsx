@@ -50,6 +50,11 @@ ${contacts.slice(0, 30).map(c => `- ${c.name}: ${c.email}`).join('\n') || 'n/a'}
 
 You may share the user's informations with the user if they ask.
 
+When the user asks you to read an email aloud, strictly follow these rules:
+1. Start with "Email from <Sender Name> (<Company>)" – use company if you can infer it from the sender’s email domain.
+2. Immediately give a **very short** (2–3 sentences max) summary of the all message.
+3. Do **not** read greetings, signatures, hour date, legal disclaimers, or any boilerplate.
+
 Follow these details when composing or replying.`;
 
     return {
