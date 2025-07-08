@@ -227,8 +227,8 @@ app.post("/api/emails/send", requireAuth, async (req, res) => {
       await emailService.authenticateGmail(req.session.tokens);
     }
     
-    const { to, subject, body, replyToId } = req.body;
-    const result = await emailService.sendEmail(to, subject, body, replyToId);
+    const { to, cc = null, subject, body, replyToId } = req.body;
+    const result = await emailService.sendEmail(to, subject, body, replyToId, cc);
     res.json(result);
   } catch (error) {
     console.error("Send email error:", error);
@@ -328,7 +328,8 @@ app.get("/api/mcp/list-tools", requireAuth, async (req, res) => {
             replyToId: {
               type: 'string',
               description: 'ID of email being replied to (optional)'
-            }
+            },
+            cc: { type: 'array', items: { type: 'string' }, description: 'Email addresses to CC (optional)' }
           },
           required: ['to', 'subject', 'body']
         }
@@ -668,10 +669,10 @@ async function getEmailDetails(args, emailService) {
 }
 
 async function sendEmail(args, emailService) {
-  const { to, subject, body, replyToId } = args;
+  const { to, cc = null, subject, body, replyToId } = args;
   
   try {
-    const result = await emailService.sendEmail(to, subject, body, replyToId);
+    const result = await emailService.sendEmail(to, subject, body, replyToId, cc);
     return {
       success: true,
       messageId: result.id,

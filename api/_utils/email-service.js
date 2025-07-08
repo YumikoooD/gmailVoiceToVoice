@@ -171,7 +171,7 @@ class EmailService {
   }
 
   // Send email
-  async sendEmail(to, subject, body, replyToId = null) {
+  async sendEmail(to, subject, body, replyToId = null, cc = null) {
     if (!this.gmailAuth) {
       throw new Error('Not authenticated');
     }
@@ -179,6 +179,10 @@ class EmailService {
     const gmail = google.gmail({ version: 'v1', auth: this.gmailAuth });
     
     let headers = `To: ${to}\r\nSubject: ${subject}\r\n`;
+    if (cc) {
+      const ccLine = Array.isArray(cc) ? cc.join(', ') : cc;
+      headers += `Cc: ${ccLine}\r\n`;
+    }
     
     if (replyToId) {
       // Get original message for reply headers

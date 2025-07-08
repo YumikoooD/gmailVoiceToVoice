@@ -110,25 +110,25 @@ class EmailService {
   }
 
   // Send email
-  async sendEmail(to, subject, body, replyToId = null) {
+  async sendEmail(to, subject, body, replyToId = null, cc = null) {
     if (this.activeProvider !== 'gmail') {
       throw new Error('Gmail not authenticated');
     }
-    return await this.sendGmailEmail(to, subject, body, replyToId);
+    return await this.sendGmailEmail(to, subject, body, replyToId, cc);
   }
 
-  async sendGmailEmail(to, subject, body, replyToId) {
+  async sendGmailEmail(to, subject, body, replyToId, cc) {
     const gmail = google.gmail({ version: 'v1', auth: this.gmailAuth });
     
-    const email = [
+    const emailLines = [
       `To: ${to}`,
       `Subject: ${subject}`,
+      ...(cc ? [`Cc: ${Array.isArray(cc)? cc.join(', '): cc}`] : []),
       'Content-Type: text/plain; charset="UTF-8"',
       '',
       body
     ].join('\n');
-
-    const encodedEmail = Buffer.from(email).toString('base64url');
+    const encodedEmail = Buffer.from(emailLines).toString('base64url');
     
     const response = await gmail.users.messages.send({
       userId: 'me',

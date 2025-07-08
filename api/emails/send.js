@@ -16,7 +16,7 @@ export default async function handler(req, res) {
       return res.status(401).json({ error: 'No valid tokens found' });
     }
 
-    const { to, subject, body, replyToId } = req.body;
+    const { to, cc, subject, body, replyToId } = req.body;
     if (!to || !subject || !body) {
       return res.status(400).json({ error: 'Missing required fields: to, subject, body' });
     }
@@ -24,7 +24,7 @@ export default async function handler(req, res) {
     const emailService = new EmailService();
     await emailService.authenticateGmail(tokens);
     
-    const result = await emailService.sendEmail(to, subject, body, replyToId);
+    const result = await emailService.sendEmail(to, subject, body, replyToId, cc);
     res.json(result);
   } catch (error) {
     console.error("Send email error:", error);

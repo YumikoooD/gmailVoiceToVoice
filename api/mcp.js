@@ -96,6 +96,11 @@ export default async function handler(req, res) {
                 type: 'string',
                 description: 'Email subject'
               },
+              cc: {
+                type: 'array',
+                items: { type: 'string' },
+                description: 'Email addresses to CC (optional)'
+              },
               body: {
                 type: 'string',
                 description: 'Email body content'
@@ -383,7 +388,7 @@ async function getEmailDetails(args) {
 }
 
 async function sendEmail(args, cookies) {
-  let { to, subject, body, replyToId } = args;
+  let { to, cc = null, subject, body, replyToId } = args;
 
   // Helper: resolve name → email using user_profile cookie or sent mail history
   const resolveEmail = async (name) => {
@@ -443,7 +448,23 @@ async function sendEmail(args, cookies) {
     to = resolved;
   }
 
-  const result = await emailService.sendEmail(to, subject, body, replyToId);
+  // Resolve CC addresses if provided
+  let ccResolved = null;
+  if (cc) {
+    const ccArray = Array.isArray(cc) ? cc : [cc];
+    ccResolved = [];
+    for (const recipient of ccArray) {
+      if (recipient.includes('@')) {
+        ccResolved.push(recipient);
+      } else {
+        const resolved = await resolveEmail(recipient);
+        if (!resolved) throw new Error(`Could not resolve email address for CC recipient "${recipient}"`);
+        ccResolved.push(resolved);
+      }
+    }
+  }
+
+  const result = await emailService.sendEmail(to, subject, body, replyToId, ccResolved);
   return result;
 }
 
