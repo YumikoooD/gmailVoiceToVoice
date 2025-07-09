@@ -1,6 +1,7 @@
 import { google } from 'googleapis';
 import EmailService from '../_utils/email-service.js';
 import { generateUserProfile } from '../_utils/user-profile.js';
+import { createSession } from '../_utils/session-store.js';
 
 export default async function handler(req, res) {
   if (req.method !== 'GET') {
@@ -23,25 +24,21 @@ export default async function handler(req, res) {
     const { tokens } = await oauth2Client.getToken(code);
 
     // ===== Auto-generate user profile =====
-    let profileCookie = '';
+    let userProfile = null;
     try {
       const emailService = new EmailService();
       await emailService.authenticateGmail(tokens);
       const sentEmails = await emailService.getSentEmails(1000);
-      const { userProfile } = await generateUserProfile(sentEmails);
-      profileCookie = `user_profile=${encodeURIComponent(JSON.stringify(userProfile))}; Secure; SameSite=Lax; Max-Age=86400; Path=/`;
+      ({ userProfile } = await generateUserProfile(sentEmails));
     } catch (profileErr) {
       console.error('Failed to generate user profile:', profileErr);
     }
 
-    // Store tokens and auth flag in secure cookies
-    const encodedTokens = encodeURIComponent(JSON.stringify(tokens));
-    const cookies = [
-      `gmail_tokens=${encodedTokens}; HttpOnly; Secure; SameSite=Strict; Max-Age=86400; Path=/`,
-      `authenticated=true; HttpOnly; Secure; SameSite=Strict; Max-Age=86400; Path=/`
-    ];
-    if (profileCookie) cookies.push(profileCookie);
-    res.setHeader('Set-Cookie', cookies);
+    // -------- Create user session --------
+    const sessionId = createSession({ tokens, userProfile });
+    res.setHeader('Set-Cookie', [
+      `session_id=${sessionId}; HttpOnly; Secure; SameSite=Lax; Max-Age=86400; Path=/`
+    ]);
 
     res.redirect('/');
   } catch (error) {

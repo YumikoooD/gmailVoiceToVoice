@@ -1,21 +1,16 @@
 import EmailService from '../../_utils/email-service.js';
-import { getTokensFromCookies, isAuthenticated } from '../../_utils/auth.js';
+import { requireAuth } from '../../_utils/auth.js';
 
 export default async function handler(req, res) {
   if (req.method !== 'PATCH') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  if (!isAuthenticated(req)) {
-    return res.status(401).json({ error: 'Authentication required' });
-  }
+  const session = requireAuth(req, res);
+  if (!session) return;
+  const { tokens } = session;
 
   try {
-    const tokens = getTokensFromCookies(req.headers.cookie);
-    if (!tokens) {
-      return res.status(401).json({ error: 'No valid tokens found' });
-    }
-
     const { id } = req.query;
     const { isRead } = req.body;
     

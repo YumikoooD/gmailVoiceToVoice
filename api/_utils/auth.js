@@ -25,16 +25,28 @@ export function getTokensFromCookies(cookies) {
   }
 }
 
-// Helper function to check if user is authenticated
-export function isAuthenticated(req) {
-  const cookies = req.headers.cookie || '';
-  return cookies.includes('authenticated=true');
+import { getSession } from './session-store.js';
+
+// New: extract session data from cookie
+export function getSessionData(req) {
+  const cookieStr = req.headers.cookie || '';
+  const match = cookieStr.match(/session_id=([^;]+)/);
+  if (!match) return null;
+  const sessionId = match[1];
+  return getSession(sessionId);
 }
 
-// Middleware-like function for auth check
-export function requireAuth(req, res, next) {
-  if (!isAuthenticated(req)) {
-    return res.status(401).json({ error: 'Authentication required' });
+// Updated authentication check – succeeds when a valid session exists
+export function isAuthenticated(req) {
+  return Boolean(getSessionData(req));
+}
+
+// Require auth and return session data instead of calling next()
+export function requireAuth(req, res) {
+  const session = getSessionData(req);
+  if (!session) {
+    res.status(401).json({ error: 'Authentication required' });
+    return null;
   }
-  next();
+  return session;
 } 
