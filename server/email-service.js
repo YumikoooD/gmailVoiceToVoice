@@ -180,7 +180,7 @@ class EmailService {
   }
 
   // Fetch recently sent emails (used for behavioural profiling)
-  async getSentEmails(limit = 300) {
+  async getSentEmails(limit = 1000) {
     if (this.activeProvider !== 'gmail') {
       throw new Error('Gmail not authenticated');
     }

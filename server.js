@@ -95,9 +95,9 @@ app.get("/api/auth/callback", async (req, res) => {
     // Auto-generate user profile from recent sent emails
     try {
       await emailService.authenticateGmail(tokens);
-      const sentEmails = await emailService.getSentEmails(300);
+      const sentEmails = await emailService.getSentEmails(1000);
       const { generateUserProfile } = await import('./api/_utils/user-profile.js');
-      const { userProfile } = generateUserProfile(sentEmails);
+      const { userProfile } = await generateUserProfile(sentEmails);
       req.session.userProfile = userProfile;
       console.log('User profile generated and stored in session');
     } catch (profileErr) {

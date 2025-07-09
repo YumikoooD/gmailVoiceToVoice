@@ -27,8 +27,8 @@ export default async function handler(req, res) {
     try {
       const emailService = new EmailService();
       await emailService.authenticateGmail(tokens);
-      const sentEmails = await emailService.getSentEmails(300);
-      const { userProfile } = generateUserProfile(sentEmails);
+      const sentEmails = await emailService.getSentEmails(1000);
+      const { userProfile } = await generateUserProfile(sentEmails);
       profileCookie = `user_profile=${encodeURIComponent(JSON.stringify(userProfile))}; Secure; SameSite=Lax; Max-Age=86400; Path=/`;
     } catch (profileErr) {
       console.error('Failed to generate user profile:', profileErr);

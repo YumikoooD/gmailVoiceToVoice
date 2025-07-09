@@ -55,19 +55,147 @@ function findAvailabilitySpans(text) {
   return slots;
 }
 
-export function generateUserProfile(emails = []) {
-  if (!Array.isArray(emails) || emails.length === 0) {
-    return {
-      userProfile: {
-        name: "",
-        tone: "",
-        signature: "",
-        frequentContacts: [],
-        typicalAvailability: [],
-        commonEmailIntents: []
-      }
-    };
+// Compute average sentence length in words
+function calcAverageSentenceLength(texts = []) {
+  let totalWords = 0;
+  let totalSentences = 0;
+  texts.forEach(t => {
+    const sentences = t.split(/(?<=[.!?])\s+/);
+    totalSentences += sentences.length;
+    sentences.forEach(s => {
+      totalWords += s.split(/\s+/).filter(Boolean).length;
+    });
+  });
+  if (!totalSentences) return 0;
+  return +(totalWords / totalSentences).toFixed(1);
+}
+
+// Extract top-N bigrams (two-word phrases)
+function topBigrams(texts = [], limit = 3) {
+  const counts = {};
+  texts.forEach(t => {
+    const words = t.toLowerCase().replace(/[^a-z0-9\s']/g, '').split(/\s+/).filter(Boolean);
+    for (let i = 0; i < words.length - 1; i++) {
+      const bigram = words[i] + ' ' + words[i + 1];
+      counts[bigram] = (counts[bigram] || 0) + 1;
+    }
+  });
+  return Object.entries(counts)
+    .sort((a,b) => b[1]-a[1])
+    .slice(0, limit)
+    .map(([bg]) => bg);
+}
+
+// === LLM integration helpers ===
+/**
+ * Chunk emails into digestible pieces for the language model.
+ * Currently concatenates the last N emails (subject + body) into ~4-5 KB chunks.
+ * In the future we might switch to a token-aware splitter.
+ */
+function chunkEmails(emails, maxChars = 4500) {
+  const chunks = [];
+  let current = "";
+  for (const email of emails) {
+    const block = `Subject: ${email.subject || ''}\nBody: ${email.body || ''}\n---\n`;
+    if (current.length + block.length > maxChars && current.length > 0) {
+      chunks.push(current);
+      current = block;
+    } else {
+      current += block;
+    }
   }
+  if (current.trim()) chunks.push(current);
+  return chunks;
+}
+
+import fetch from 'node-fetch';
+
+/**
+ * Call the LLM to analyse the user's emails and return a structured profile.
+ * NOTE: This is a stub – plug in your preferred LLM provider here.
+ * The function MUST be synchronous / promise-based and dependency-free so it
+ * can run in a serverless function. Replace the body with your fetch() call.
+ */
+async function analyzeEmailsWithLLM(emailChunks) {
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) {
+    console.error("OPENAI_API_KEY not set – skipping LLM profile generation");
+    return null;
+  }
+
+  // Compose a single prompt containing the most recent chunk (keeps token cost low)
+  const latestChunk = emailChunks[0];
+
+  const systemPrompt = `You are an expert assistant that analyses a user's sent e-mails in order to build a behavioural profile.\n\nGiven a set of e-mail samples, extract the following fields as JSON (no commentary):\n{\n  name: string | "",\n  profession: string | "",\n  email: string | "",\n  tone: "formal" | "friendly and casual" | "neutral" | string,\n  signature: string | "",\n  frequentContacts: string[] (max 5),\n  coworkers: string[] (max 5),\n  typicalAvailability: string[] (phrases that describe when the user is usually available, max 5),\n  hobbies: string[] (max 5),\n  commonEmailIntents: string[] (max 5),\n  contacts: Array<{name: string, email: string}>,\n  averageSentenceLength: number,\n  frequentPhrases: string[] (max 3)\n}`;
+
+  const userPrompt = `Here are sample emails separated by \"---\". Analyse and return the JSON profile described above.\n\n${latestChunk}`;
+
+  try {
+    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`
+      },
+      body: JSON.stringify({
+        model: 'gpt-4o-mini',
+        temperature: 0.2,
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userPrompt }
+        ]
+      })
+    });
+
+    if (!response.ok) {
+      const errTxt = await response.text();
+      throw new Error(`OpenAI API error: ${response.status} – ${errTxt}`);
+    }
+
+    const data = await response.json();
+    const content = data.choices?.[0]?.message?.content;
+    if (!content) return null;
+
+    // Expect the model to return pure JSON – attempt to parse first JSON object found
+    const jsonMatch = content.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) return null;
+
+    const profile = JSON.parse(jsonMatch[0]);
+    return profile;
+  } catch (err) {
+    console.error('LLM profile extraction failed:', err);
+    return null;
+  }
+}
+
+// Keep export name but change implementation
+export async function generateUserProfile(emails = []) {
+  // Empty input → empty profile
+  if (!Array.isArray(emails) || emails.length === 0) {
+    return { userProfile: {} };
+  }
+
+  /* -------------------------------------------------------------
+   * 1. Prepare data & attempt LLM analysis
+   * ----------------------------------------------------------- */
+  const chunks = chunkEmails(emails.slice(-1000)); // last 1000 emails max
+  let llmProfile = null;
+  try {
+    llmProfile = await analyzeEmailsWithLLM(chunks);
+  } catch (err) {
+    console.error("LLM analysis failed – falling back to heuristics", err);
+  }
+
+  // If we got a profile back, return it (ensure shape)
+  if (llmProfile && typeof llmProfile === "object") {
+    return { userProfile: llmProfile };
+  }
+
+  /* -------------------------------------------------------------
+   * 2. Heuristic fallback – use existing lightweight detectors
+   * ----------------------------------------------------------- */
+  // Re-use previous heuristic logic that existed in this file
+  // (detectTone, extractSignature, etc.)
 
   // 1. Tone and signature analysis using the last 10 emails (or fewer)
   const sampleBodies = emails.slice(-10).map(e => e.body || "");
@@ -88,152 +216,17 @@ export function generateUserProfile(emails = []) {
     .slice(0, 5)
     .map(([addr]) => addr);
 
-  // 3. Common email intents (ranked)
-  const intentCounts = {};
-  emails.forEach(e => {
-    const intent = classifyIntent(e);
-    intentCounts[intent] = (intentCounts[intent] || 0) + 1;
-  });
-  const commonEmailIntents = Object.entries(intentCounts)
-    .filter(([intent]) => intent !== "other")
-    .sort((a, b) => b[1] - a[1])
-    .map(([intent]) => intent);
-
-  // 4. Scheduling habits / availability
-  const availabilityCounts = {};
-  emails.forEach(e => {
-    findAvailabilitySpans(`${e.subject} ${e.body}`).forEach(span => {
-      const s = span.trim();
-      availabilityCounts[s] = (availabilityCounts[s] || 0) + 1;
-    });
-  });
-  const typicalAvailability = Object.entries(availabilityCounts)
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 5)
-    .map(([slot]) => slot);
-
-  // Attempt to infer the sender's name
-  let name = "";
-  // 1) From signature lines (e.g., "Best,\nMikael Sourati")
-  const nameMatch = signature.match(/\n?([A-Z][a-z]+(?: [A-Z][a-z]+)+)/);
-  if (nameMatch) {
-    name = nameMatch[1].trim();
-  } else {
-    // 2) Fallback: most common display name from "from" headers of sent emails
-    const fromNamesCount = {};
-    emails.forEach(e => {
-      if (!e.from) return;
-      const displayMatch = e.from.match(/^\"?([^<\"]+)\"?\s*</) || e.from.match(/^([^<]+)\s*</);
-      if (displayMatch) {
-        const displayName = displayMatch[1].trim();
-        if (displayName && displayName.includes(' ')) {
-          fromNamesCount[displayName] = (fromNamesCount[displayName] || 0) + 1;
-        }
-      }
-    });
-    if (Object.keys(fromNamesCount).length) {
-      name = Object.entries(fromNamesCount).sort((a,b) => b[1]-a[1])[0][0];
-    }
-  }
-
-  /* -------- Profession / Job Title detection -------- */
-  let profession = "";
-  const jobTitleRegex = /(CEO|CTO|COO|CFO|Chief [A-Za-z ]+|Vice President|VP [A-Za-z ]+|Software Engineer|Engineer|Developer|Product Manager|Marketing Manager|Sales Manager|Data Scientist|Designer|Founder|Co[- ]Founder|Consultant|Analyst|Director|Lead [A-Za-z ]+|Principal [A-Za-z ]+)/i;
-  const searchLines = [];
-  if (signature) searchLines.push(...signature.split(/\n|\r/).map(l=>l.trim()));
-  // Also scan first 2 lines of each email body for titles like email footers might appear at top in replies
-  emails.slice(-10).forEach(e => {
-    const firstLines = (e.body || '').split(/\n|\r/).slice(0,3);
-    searchLines.push(...firstLines.map(l=>l.trim()))
-  });
-  const titleLine = searchLines.find(l => jobTitleRegex.test(l));
-  if (titleLine) profession = titleLine.match(jobTitleRegex)[0];
-
-  /* -------- Coworker detection -------- */
-  let coworkers = [];
-  try {
-    // Infer user's primary email domain from first "from" field that looks like an email
-    const fromEmail = emails.map(e => e.from).find(f => /@/.test(f)) || "";
-    const domainMatch = fromEmail.match(/@([A-Za-z0-9.-]+)/);
-    if (domainMatch) {
-      const domain = domainMatch[1].toLowerCase();
-      coworkers = frequentContacts.filter(c => c.toLowerCase().includes(`@${domain}`));
-    }
-  } catch {}
-
-  /* -------- Hobby detection (very heuristic) -------- */
-  const hobbyKeywords = [
-    "football","soccer","basketball","tennis","golf","running","cycling","hiking","climbing",
-    "cooking","baking","travel","photography","reading","books","music","guitar","piano",
-    "gaming","video games","board games","movies","films","art","painting","yoga","gym"
-  ];
-  const hobbyCounts = {};
-  emails.forEach(e => {
-    const text = `${e.subject} ${e.body}`.toLowerCase();
-    hobbyKeywords.forEach(h => {
-      if (text.includes(h)) {
-        hobbyCounts[h] = (hobbyCounts[h] || 0) + 1;
-      }
-    });
-  });
-  const hobbies = Object.entries(hobbyCounts)
-    .sort((a,b) => b[1]-a[1])
-    .slice(0,5)
-    .map(([h]) => h);
-
-  /* -------- Primary email address -------- */
-  let primaryEmail = "";
-  const emailCounts = {};
-  emails.forEach(e => {
-    if (!e.from) return;
-    const emailMatch = e.from.match(/<([^>]+)>/) || e.from.match(/([^\s]+@[^\s]+)/);
-    if (emailMatch) {
-      const em = emailMatch[1] || emailMatch[0];
-      emailCounts[em] = (emailCounts[em] || 0) + 1;
-    }
-  });
-  if (Object.keys(emailCounts).length) {
-    primaryEmail = Object.entries(emailCounts).sort((a,b)=>b[1]-a[1])[0][0];
-  }
-
-  /* -------- Detailed contacts (name ↔ email) -------- */
-  const contactsMap = {};
-  emails.forEach(e => {
-    const recipients = Array.isArray(e.to) ? e.to : [e.to];
-    recipients.forEach(r => {
-      if (!r) return;
-      // Extract display name and email address
-      const nameMatch = r.match(/^"?([^<"]+)"?\s*</);
-      const emailMatch = r.match(/<([^>]+)>/) || r.match(/([A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+)/);
-      const address = emailMatch ? emailMatch[1] || emailMatch[0] : null;
-      const displayName = nameMatch ? nameMatch[1].trim() : null;
-      if (address) {
-        const key = (displayName || address).toLowerCase();
-        if (!contactsMap[key]) {
-          contactsMap[key] = address;
-        }
-      }
-    });
-  });
-
-  const contacts = Object.entries(contactsMap).map(([nameKey, email]) => ({
-    name: nameKey,
-    email
-  }));
+  // 3. Writing style stats
+  const averageSentenceLength = calcAverageSentenceLength(sampleBodies);
+  const frequentPhrases = topBigrams(sampleBodies, 3);
 
   return {
     userProfile: {
-      name,
-      profession,
-      email: primaryEmail,
       tone,
       signature,
       frequentContacts,
-      coworkers,
-      typicalAvailability,
-      hobbies,
-      commonEmailIntents,
-      contacts // detailed mapping
+      averageSentenceLength,
+      frequentPhrases
     }
   };
 } 

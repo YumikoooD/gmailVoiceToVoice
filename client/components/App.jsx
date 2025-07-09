@@ -48,6 +48,10 @@ Frequent contacts: ${frequentContacts.join(', ') || 'n/a'}.
 Address book (name → email):
 ${contacts.slice(0, 30).map(c => `- ${c.name}: ${c.email}`).join('\n') || 'n/a'}.
 
+You are NOT the user; you are their assistant. Outside of actual e-mail bodies refer to the user in the third person ("you have 3 emails", "your calendar"), and never say "I am <user name>".
+
+When you draft or reply to an e-mail the CONTENT should be written from the user's perspective (first-person), but your explanatory messages to the user must stay in assistant voice.
+
 You may share the user's informations with the user if they ask.
 
 When the user asks you to read an email aloud, strictly follow these rules:
@@ -160,12 +164,15 @@ Follow these details when composing or replying.`;
   const sendClientEvent = useCallback((message) => {
     if (dataChannel) {
       const timestamp = new Date().toLocaleTimeString();
-      message.event_id = message.event_id || crypto.randomUUID();
+      const outbound = { ...message };
+      outbound.event_id = outbound.event_id || crypto.randomUUID();
 
-      // send event before setting timestamp since the backend peer doesn't expect this field
-      dataChannel.send(JSON.stringify(message));
+      // Ensure timestamp is NOT sent (OpenAI rejects unknown params)
+      if (outbound.timestamp !== undefined) delete outbound.timestamp;
 
-      // if guard just in case the timestamp exists by miracle
+      dataChannel.send(JSON.stringify(outbound));
+
+      // Add timestamp locally for UI/logging
       if (!message.timestamp) {
         message.timestamp = timestamp;
       }
@@ -255,9 +262,15 @@ Follow these details when composing or replying.`;
         processedCallIds.current = new Set();
         setIsSessionActive(true);
         setEvents([]);
+
+        // Immediately send personalised system prompt so the LLM has full user context
+        if (personalisedSystemMessage) {
+          console.log('🚀 Sending personalised system prompt at channel open');
+          sendClientEvent(personalisedSystemMessage);
+        }
       });
     }
-  }, [dataChannel, pendingSessionUpdates, sendClientEvent]);
+  }, [dataChannel, pendingSessionUpdates, sendClientEvent, personalisedSystemMessage]);
 
   // Handle MCP tool calls from events - separate effect to avoid dependency issues
   useEffect(() => {

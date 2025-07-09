@@ -269,7 +269,7 @@ class EmailService {
   }
 
   // Get recently sent emails (for user profiling)
-  async getSentEmails(maxResults = 300) {
+  async getSentEmails(maxResults = 1000) {
     if (!this.gmailAuth) {
       throw new Error('Not authenticated');
     }

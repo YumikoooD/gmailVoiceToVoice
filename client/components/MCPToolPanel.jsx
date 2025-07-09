@@ -80,6 +80,9 @@ You MUST use MCP tools for ALL email and calendar operations. You are FORBIDDEN 
 - User asks "find my meeting about [topic]" → call search_events with query
 - User asks about specific event → call get_event_details with eventId
 
+👤 SELF-PROFILE ACCESS:
+If the user asks questions like "What do you know about me?", "Show my profile", "Describe my writing style", etc. → FIRST call **get_user_profile** (no arguments), then answer using that data. It is allowed to share the stored profile with the user.
+
 🚨 CRITICAL: ANY mention of specific dates (like "July 5", "5 July", "March 15th", etc.) MUST trigger appropriate list_emails or list_events with proper date parameters!
 
 🔥 AVAILABLE MCP TOOLS:
