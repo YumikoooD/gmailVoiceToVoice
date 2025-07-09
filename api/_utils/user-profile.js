@@ -1,232 +1,190 @@
-// Utility to generate a behavioral profile from a list of sent emails
-// Expected email object shape: {
-//   to: string | string[],
-//   subject: string,
-//   body: string,
-//   date?: string
-// }
-// All methods are heuristic-based and use no external dependencies so the
-// function can run in a serverless environment.
+/****************************************************************
+ * Generate a behavioural profile from a set of sent e-mails.   *
+ * Uses OpenAI GPT-4o for all heavy lifting and falls back to   *
+ * lightweight heuristics only if every LLM call fails.         *
+ ****************************************************************/
 
-// Extract a signature block (e.g. "Best,\nMikael") from the tail of the email
-function extractSignature(text = "") {
-  const match = text.match(/(?:\n|^)(best|thanks|cheers|regards)[\s,–-]*\n([\s\S]{0,200})$/i);
-  if (!match) return "";
-  return text.slice(match.index).trim();
+import fetch from 'node-fetch';
+
+/* ------------------------------------------------------------- */
+/* --------------  1.  Chunking & Sanitisation  ---------------- */
+/* ------------------------------------------------------------- */
+
+/** A very small HTML → text remover. */
+function stripHtml(str = '') {
+  return str.replace(/<[^>]+>/g, ' ');
 }
 
-// Very lightweight tone detection based on presence of common markers
-function detectTone(samples = []) {
-  const formalMarkers = ["Dear", "Regards", "Sincerely"];
-  const friendlyMarkers = ["Hey", "Hi", "Thanks", "!"];
-
-  let formal = 0;
-  let friendly = 0;
-
-  samples.forEach(t => {
-    if (formalMarkers.some(m => t.includes(m))) formal += 1;
-    if (friendlyMarkers.some(m => t.includes(m))) friendly += 1;
-  });
-
-  if (formal > friendly) return "formal";
-  if (friendly > formal) return "friendly and casual";
-  return "neutral";
-}
-
-// Classify an individual email into a high-level intent bucket
-function classifyIntent(email) {
-  const text = `${email.subject} ${email.body}`.toLowerCase();
-  if (/meet|call|schedule|availability/.test(text)) return "schedule a meeting";
-  if (/follow up|just checking|ping/.test(text)) return "follow up";
-  if (/attached|here is|share|link|document/.test(text)) return "share a document";
-  if (/answer|respond|response|re:/.test(text)) return "respond to a question";
-  if (/status|progress|update|checking in/.test(text)) return "check in / status update";
-  return "other";
-}
-
-// Find human-readable availability patterns (e.g. "Thursday morning")
-function findAvailabilitySpans(text) {
-  const slots = [];
-  const regex = /\b(?:mon|tues|wednes|thurs|fri|satur|sun)(?:day)?(?:\s+(?:mornings?|afternoons?|evenings?|\d{1,2}(?::\d{2})?\s*(?:am|pm)))?/gi;
-  let match;
-  while ((match = regex.exec(text))) {
-    slots.push(match[0]);
-  }
-  return slots;
-}
-
-// Compute average sentence length in words
-function calcAverageSentenceLength(texts = []) {
-  let totalWords = 0;
-  let totalSentences = 0;
-  texts.forEach(t => {
-    const sentences = t.split(/(?<=[.!?])\s+/);
-    totalSentences += sentences.length;
-    sentences.forEach(s => {
-      totalWords += s.split(/\s+/).filter(Boolean).length;
-    });
-  });
-  if (!totalSentences) return 0;
-  return +(totalWords / totalSentences).toFixed(1);
-}
-
-// Extract top-N bigrams (two-word phrases)
-function topBigrams(texts = [], limit = 3) {
-  const counts = {};
-  texts.forEach(t => {
-    const words = t.toLowerCase().replace(/[^a-z0-9\s']/g, '').split(/\s+/).filter(Boolean);
-    for (let i = 0; i < words.length - 1; i++) {
-      const bigram = words[i] + ' ' + words[i + 1];
-      counts[bigram] = (counts[bigram] || 0) + 1;
-    }
-  });
-  return Object.entries(counts)
-    .sort((a,b) => b[1]-a[1])
-    .slice(0, limit)
-    .map(([bg]) => bg);
-}
-
-// === LLM integration helpers ===
-/**
- * Chunk emails into digestible pieces for the language model.
- * Currently concatenates the last N emails (subject + body) into ~4-5 KB chunks.
- * In the future we might switch to a token-aware splitter.
- */
-function chunkEmails(emails, maxChars = 4500) {
+/** Build ~4-5 KB ASCII chunks for the LLM. */
+function chunkEmails(emails, maxChars = 4500, maxChunks = 5) {
   const chunks = [];
-  let current = "";
+  let current = '';
+
   for (const email of emails) {
-    const block = `Subject: ${email.subject || ''}\nBody: ${email.body || ''}\n---\n`;
-    if (current.length + block.length > maxChars && current.length > 0) {
+    const block = [
+      `Subject: ${stripHtml(email.subject || '').slice(0, 200)}`,
+      `From: ${email.from || ''}`,
+      `To: ${Array.isArray(email.to) ? email.to.join(', ') : email.to || ''}`,
+      'Body:',
+      stripHtml(email.body || '').slice(0, 4000), // guard very long mails
+      '---'
+    ].join('\n');
+
+    if (current.length + block.length > maxChars && current.length) {
       chunks.push(current);
+      if (chunks.length === maxChunks) break;
       current = block;
     } else {
       current += block;
     }
   }
-  if (current.trim()) chunks.push(current);
+  if (current && chunks.length < maxChunks) chunks.push(current);
   return chunks;
 }
 
-import fetch from 'node-fetch';
+/* ------------------------------------------------------------- */
+/* --------------  2.  OpenAI helper (JSON only)  -------------- */
+/* ------------------------------------------------------------- */
 
-/**
- * Call the LLM to analyse the user's emails and return a structured profile.
- * NOTE: This is a stub – plug in your preferred LLM provider here.
- * The function MUST be synchronous / promise-based and dependency-free so it
- * can run in a serverless function. Replace the body with your fetch() call.
- */
-async function analyzeEmailsWithLLM(emailChunks) {
+async function callOpenAI(messages, {
+  model = 'gpt-4o-mini',
+  temperature = 0.2
+} = {}) {
   const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey) {
-    console.error("OPENAI_API_KEY not set – skipping LLM profile generation");
-    return null;
+  if (!apiKey) throw new Error('OPENAI_API_KEY missing');
+
+  const response = await fetch('https://api.openai.com/v1/chat/completions', {
+    method : 'POST',
+    headers: {
+      'Content-Type' : 'application/json',
+      'Authorization': `Bearer ${apiKey}`
+    },
+    body: JSON.stringify({ model, temperature, messages })
+  });
+
+  if (!response.ok) {
+    throw new Error(`OpenAI error: ${response.status} ${await response.text()}`);
   }
 
-  // Compose a single prompt containing the most recent chunk (keeps token cost low)
-  const latestChunk = emailChunks[0];
+  const data    = await response.json();
+  const content = data.choices?.[0]?.message?.content;
+  if (!content) throw new Error('No content in OpenAI response');
 
-  const systemPrompt = `You are an expert assistant that analyses a user's sent e-mails in order to build a behavioural profile.\n\nGiven a set of e-mail samples, extract the following fields as JSON (no commentary):\n{\n  name: string | "",\n  profession: string | "",\n  email: string | "",\n  tone: "formal" | "friendly and casual" | "neutral" | string,\n  signature: string | "",\n  frequentContacts: string[] (max 5),\n  coworkers: string[] (max 5),\n  typicalAvailability: string[] (phrases that describe when the user is usually available, max 5),\n  hobbies: string[] (max 5),\n  commonEmailIntents: string[] (max 5),\n  contacts: Array<{name: string, email: string}>,\n  averageSentenceLength: number,\n  frequentPhrases: string[] (max 3)\n}`;
+  // Extract first {...} looking JSON object
+  const match = content.match(/\{[\s\S]*\}/);
+  if (!match) throw new Error('JSON not found in LLM reply');
 
-  const userPrompt = `Here are sample emails separated by \"---\". Analyse and return the JSON profile described above.\n\n${latestChunk}`;
-
-  try {
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey}`
-      },
-      body: JSON.stringify({
-        model: 'gpt-4o-mini',
-        temperature: 0.2,
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: userPrompt }
-        ]
-      })
-    });
-
-    if (!response.ok) {
-      const errTxt = await response.text();
-      throw new Error(`OpenAI API error: ${response.status} – ${errTxt}`);
-    }
-
-    const data = await response.json();
-    const content = data.choices?.[0]?.message?.content;
-    if (!content) return null;
-
-    // Expect the model to return pure JSON – attempt to parse first JSON object found
-    const jsonMatch = content.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) return null;
-
-    const profile = JSON.parse(jsonMatch[0]);
-    return profile;
-  } catch (err) {
-    console.error('LLM profile extraction failed:', err);
-    return null;
-  }
+  return JSON.parse(match[0]);
 }
 
-// Keep export name but change implementation
-export async function generateUserProfile(emails = []) {
-  // Empty input → empty profile
-  if (!Array.isArray(emails) || emails.length === 0) {
-    return { userProfile: {} };
-  }
+/* ------------------------------------------------------------- */
+/* --------------  3.  LLM-driven profile building  ------------ */
+/* ------------------------------------------------------------- */
 
-  /* -------------------------------------------------------------
-   * 1. Prepare data & attempt LLM analysis
-   * ----------------------------------------------------------- */
-  const chunks = chunkEmails(emails.slice(-1000)); // last 1000 emails max
-  let llmProfile = null;
-  try {
-    llmProfile = await analyzeEmailsWithLLM(chunks);
-  } catch (err) {
-    console.error("LLM analysis failed – falling back to heuristics", err);
-  }
+/** Request the LLM to create a profile for ONE chunk. */
+async function analyseChunk(chunkText) {
+  const system = `You are an AI that extracts user behavioural profiles ONLY in JSON.
+Respond with strict JSON and nothing else.`;
+  const user   = `Using the e-mails below, build a partial profile with these fields:
+{
+  name, profession, email, tone, signature,
+  frequentContacts, coworkers, typicalAvailability,
+  hobbies, commonEmailIntents, contacts,
+  averageSentenceLength, frequentPhrases
+}
+E-mails:
+${chunkText}`;
 
-  // If we got a profile back, return it (ensure shape)
-  if (llmProfile && typeof llmProfile === "object") {
-    return { userProfile: llmProfile };
-  }
+  return await callOpenAI([
+    { role: 'system', content: system },
+    { role: 'user',   content: user   }
+  ]);
+}
 
-  /* -------------------------------------------------------------
-   * 2. Heuristic fallback – use existing lightweight detectors
-   * ----------------------------------------------------------- */
-  // Re-use previous heuristic logic that existed in this file
-  // (detectTone, extractSignature, etc.)
+/** Ask the LLM to merge N partial profiles into one. */
+async function aggregateProfiles(partials) {
+  const system = `You are an AI that merges multiple partial user profiles into a single JSON profile.`;
+  const user   = `Merge the following JSON snippets into ONE complete profile. 
+Return JSON only, same schema.
 
-  // 1. Tone and signature analysis using the last 10 emails (or fewer)
-  const sampleBodies = emails.slice(-10).map(e => e.body || "");
-  const tone = detectTone(sampleBodies);
-  const signature = extractSignature(sampleBodies.reverse().find(b => b.trim()) || "");
+${partials.map((p, i) => `### Profile ${i + 1}\n${JSON.stringify(p)}`).join('\n\n')}
+`;
 
-  // 2. Frequent contacts (top 5)
-  const contactCounts = {};
-  emails.forEach(e => {
-    const recipients = Array.isArray(e.to) ? e.to : [e.to];
-    recipients.forEach(addr => {
-      if (!addr) return;
-      contactCounts[addr] = (contactCounts[addr] || 0) + 1;
-    });
+  return await callOpenAI([
+    { role: 'system', content: system },
+    { role: 'user',   content: user   }
+  ]);
+}
+
+/* ------------------------------------------------------------- */
+/* --------------  4.  Heuristic fallback helpers -------------- */
+/* ------------------------------------------------------------- */
+
+function detectTone(samples = []) {
+  const formal    = ['regards', 'sincerely'];
+  const friendly  = ['hey', 'hi', 'thanks', '!'];
+  let f = 0, fr = 0;
+  samples.forEach(t => {
+    if (formal.some(w => t.toLowerCase().includes(w))) f += 1;
+    if (friendly.some(w => t.toLowerCase().includes(w))) fr += 1;
   });
-  const frequentContacts = Object.entries(contactCounts)
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 5)
-    .map(([addr]) => addr);
+  if (f > fr)  return 'formal';
+  if (fr > f)  return 'friendly and casual';
+  return 'neutral';
+}
 
-  // 3. Writing style stats
-  const averageSentenceLength = calcAverageSentenceLength(sampleBodies);
-  const frequentPhrases = topBigrams(sampleBodies, 3);
+function extractSignature(text = '') {
+  const m = text.match(/(?:\n|^)(best|thanks|regards)[\s,–-]*\n([\s\S]{0,200})$/i);
+  return m ? text.slice(m.index).trim() : '';
+}
+
+function avgSentenceLen(texts) {
+  let words = 0, sents = 0;
+  texts.forEach(t => {
+    const ss = t.split(/(?<=[.!?])\s+/);
+    sents += ss.length;
+    ss.forEach(s => words += s.split(/\s+/).filter(Boolean).length);
+  });
+  return sents ? +(words / sents).toFixed(1) : 0;
+}
+
+/* ------------------------------------------------------------- */
+/* ----------------  5.  PUBLIC API FUNCTION  ------------------ */
+/* ------------------------------------------------------------- */
+
+/**
+ * Build a user profile from sent e-mails.
+ * @param {Array<{subject:string, body:string, to:string|string[], from:string}>} emails
+ * @return {Promise<{userProfile:object}>}
+ */
+export async function generateUserProfile(emails = []) {
+  if (!emails.length) return { userProfile: {} };
+
+  /* ----------  LLM multi-chunk pipeline  ---------- */
+  try {
+    const chunks   = chunkEmails(emails.slice(-1000));        // newest first
+    const partials = [];
+
+    // analyse first 3-5 chunks (depending on availability)
+    for (const chunk of chunks.slice(0, 5)) {
+      partials.push(await analyseChunk(chunk));
+    }
+
+    // aggregate
+    const finalProfile = await aggregateProfiles(partials);
+    return { userProfile: finalProfile };
+  } catch (err) {
+    console.error('LLM profile generation failed – fallback heuristics', err);
+  }
+
+  /* ----------  Heuristic emergency fallback  ---------- */
+  const sampleBodies = emails.slice(-10).map(e => e.body || '');
 
   return {
     userProfile: {
-      tone,
-      signature,
-      frequentContacts,
-      averageSentenceLength,
-      frequentPhrases
+      tone: detectTone(sampleBodies),
+      signature: extractSignature(sampleBodies.find(b => b.trim()) || ''),
+      averageSentenceLength: avgSentenceLen(sampleBodies)
     }
   };
 } 

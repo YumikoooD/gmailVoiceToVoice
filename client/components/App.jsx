@@ -41,7 +41,7 @@ Always end emails with:\n${signature || 'Best,\n<name>'}.
 
 Coworkers: ${coworkers.join(', ') || 'n/a'}.
 Hobbies / interests: ${hobbies.join(', ') || 'n/a'}.
-Typical availability: ${typicalAvailability.join(', ') || 'n/a'}.
+Typical availability: ${Array.isArray(typicalAvailability) ? typicalAvailability.join(', ') : (typicalAvailability || 'n/a')}.
 
 Frequent contacts: ${frequentContacts.join(', ') || 'n/a'}.
 
