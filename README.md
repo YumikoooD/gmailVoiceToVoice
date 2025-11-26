@@ -1,148 +1,311 @@
-# AI Email Assistant - Voice-Controlled Email Management
+<p align="center">
+  <img src="https://raw.githubusercontent.com/PKief/vscode-material-icon-theme/main/icons/email.svg" width="100" alt="logo">
+</p>
 
-Transform your daily commute into productive email management time with AI-powered voice commands. This application uses OpenAI's Realtime API to help you achieve **Inbox Zero** through natural voice interactions.
+<h1 align="center">📧 Voice Mail AI</h1>
 
-## 🎯 Perfect for:
-- **Commuters** - Manage emails hands-free while driving
-- **Accessibility** - Voice-first email management for those with mobility limitations
-- **Productivity** - Efficient email triaging and response drafting
-- **Multitaskers** - Handle emails while doing other tasks
+<p align="center">
+  <strong>Your AI-powered voice assistant for Gmail</strong><br>
+  Manage your inbox hands-free with natural conversations
+</p>
 
-## ✨ Features
+<p align="center">
+  <img src="https://img.shields.io/badge/OpenAI-Realtime_API-412991?style=for-the-badge&logo=openai&logoColor=white" alt="OpenAI">
+  <img src="https://img.shields.io/badge/Gmail-API-EA4335?style=for-the-badge&logo=gmail&logoColor=white" alt="Gmail">
+  <img src="https://img.shields.io/badge/React-18-61DAFB?style=for-the-badge&logo=react&logoColor=black" alt="React">
+  <img src="https://img.shields.io/badge/Node.js-18+-339933?style=for-the-badge&logo=node.js&logoColor=white" alt="Node.js">
+</p>
 
-### Voice Commands
-- **"Check my inbox"** - Get a summary of unread emails
-- **"Read my latest emails"** - AI reads emails aloud with key information
-- **"Reply to John's email"** - Draft contextual responses
-- **"Send an email to..."** - Compose and send new emails
-- **"Delete this email"** - Remove unwanted messages
-- **"Mark as read"** - Update email status
+<br>
 
-### AI Capabilities
-- **Smart Email Triaging** - Prioritize important emails
-- **Context-Aware Replies** - Generate appropriate responses based on email content
-- **Email Summarization** - Get key points from long emails
-- **Natural Language Processing** - Understand complex voice commands
-- **Gmail Integration** - Full Gmail support with OAuth authentication
+<p align="center">
+  <img src="https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExcHJvdmVocXN2aGxiMGF6OGd6ZTlnOGV6bXA4cWNtNnRxZ3hhYnNodyZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/077i6AULCXc0FKTj9s/giphy.gif" width="600" alt="Voice AI Demo">
+</p>
 
-## 🚀 Quick Start
+---
 
-### 1. Install Dependencies
-```bash
-npm install
+## ✨ What is Voice Mail AI?
+
+**Voice Mail AI** transforms how you interact with email. Instead of typing and scrolling, simply *talk* to your inbox. Built with OpenAI's cutting-edge Realtime API, it understands natural language and responds with a human-like voice.
+
+<table>
+<tr>
+<td width="50%">
+
+### 🎙️ Voice-First Experience
+
+Speak naturally like you're talking to an assistant:
+
+> *"Hey, what emails did I get today?"*
+> 
+> *"Read me the one from Sarah"*
+> 
+> *"Reply saying I'll call her tomorrow"*
+
+</td>
+<td width="50%">
+
+### 🚗 Perfect for Commuters
+
+Turn your drive time into productive inbox management:
+
+- ✅ Hands-free operation
+- ✅ Eyes on the road
+- ✅ Arrive with Inbox Zero
+
+</td>
+</tr>
+</table>
+
+---
+
+## 🎬 See It In Action
+
+<table>
+<tr>
+<td align="center" width="33%">
+<img src="https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExb3BtbWZlb2lhd2NnMmNlZHJnbnRtN2ttdXF4OGdsZXFmMnFjbThtdyZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/26tn33aiTi1jkl6H6/giphy.gif" width="200"><br>
+<strong>📥 Check Inbox</strong><br>
+<em>"Show me my unread emails"</em>
+</td>
+<td align="center" width="33%">
+<img src="https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExcWFvNXBqMGN0NXFxMnBxcjZrcXlhMWV4dGFyaWNqYjBxaGNmZ3g1cyZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/l0MYt5jPR6QX5pnqM/giphy.gif" width="200"><br>
+<strong>✉️ Send Emails</strong><br>
+<em>"Send an email to John about..."</em>
+</td>
+<td align="center" width="33%">
+<img src="https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExNGNiNHd5Y3RoMnBqMGdjMjR4YXE3aGNyYjVtY2ppOWNlN3hvMHNhMCZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/3o7btPCcdNniyf0ArS/giphy.gif" width="200"><br>
+<strong>📅 Manage Calendar</strong><br>
+<em>"Schedule a meeting for..."</em>
+</td>
+</tr>
+</table>
+
+---
+
+## 🚀 Features
+
+<table>
+<tr>
+<td>
+
+### 📬 Email Management
+- List and read emails aloud
+- Send new emails by voice
+- Reply to conversations
+- Delete unwanted messages
+- Mark as read/unread
+
+</td>
+<td>
+
+### 📅 Calendar Integration
+- Create events with voice
+- Add Google Meet links
+- Invite attendees
+- Check your schedule
+- Update or cancel events
+
+</td>
+<td>
+
+### 🧠 AI Intelligence
+- Context-aware responses
+- Smart email summaries
+- Natural conversations
+- Learns your writing style
+- Filters out spam/promos
+
+</td>
+</tr>
+</table>
+
+---
+
+## 🛠️ Tech Stack
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                        VOICE MAIL AI                         │
+├─────────────────────────────────────────────────────────────┤
+│  ┌─────────────┐    ┌─────────────┐    ┌─────────────┐     │
+│  │   React     │    │   Express   │    │   OpenAI    │     │
+│  │  Frontend   │◄──►│   Server    │◄──►│  Realtime   │     │
+│  │             │    │             │    │     API     │     │
+│  └─────────────┘    └──────┬──────┘    └─────────────┘     │
+│                            │                                 │
+│                     ┌──────▼──────┐                         │
+│                     │   Google    │                         │
+│                     │  Gmail API  │                         │
+│                     │ Calendar API│                         │
+│                     └─────────────┘                         │
+└─────────────────────────────────────────────────────────────┘
 ```
 
-### 2. Configure Environment Variables
-Copy `config.env` and update the following:
+| Layer | Technology |
+|-------|------------|
+| **Frontend** | React 18, Vite, TailwindCSS |
+| **Backend** | Node.js, Express |
+| **Voice AI** | OpenAI Realtime API (GPT-4o) |
+| **Email** | Gmail API with OAuth 2.0 |
+| **Calendar** | Google Calendar API |
+| **Deployment** | Vercel (Serverless) |
+
+---
+
+## ⚡ Quick Start
+
+### Prerequisites
+
+- Node.js 18+
+- OpenAI API Key
+- Google Cloud Project with Gmail API
+
+### Installation
+
+```bash
+# Clone the repository
+git clone https://github.com/yourusername/voice-mail-ai.git
+cd voice-mail-ai
+
+# Install dependencies
+npm install
+
+# Create environment file
+cp config.env.example config.env
+```
+
+### Configuration
+
+Edit `config.env` with your credentials:
 
 ```env
-# Required: OpenAI API Key
-OPENAI_API_KEY=your-openai-api-key
-
-# Gmail OAuth (Get from Google Cloud Console)
-GMAIL_CLIENT_ID=your-gmail-client-id.apps.googleusercontent.com
-GMAIL_CLIENT_SECRET=your-gmail-client-secret
-GMAIL_REDIRECT_URI=http://localhost:3000/auth/gmail/callback
+OPENAI_API_KEY=sk-your-openai-key
+GMAIL_CLIENT_ID=your-client-id.apps.googleusercontent.com
+GMAIL_CLIENT_SECRET=your-client-secret
+GMAIL_REDIRECT_URI=http://localhost:3000/api/auth/callback
+SESSION_SECRET=your-random-secret
 ```
 
-### 3. Set Up Gmail Authentication
+> 📖 See [OAUTH_SETUP.md](./OAUTH_SETUP.md) for detailed Gmail configuration
 
-#### Gmail Setup:
-1. Go to [Google Cloud Console](https://console.cloud.google.com/)
-2. Create a new project or select existing
-3. Enable Gmail API
-4. Create OAuth 2.0 credentials
-5. Add your domain to authorized origins
+### Run
 
-### 4. Start the Application
 ```bash
 npm run dev
 ```
 
-Navigate to `http://localhost:3000` and start your voice-controlled email management!
-
-## 🎙️ Usage Guide
-
-### Getting Started
-1. **Start Session** - Click "Start Session" to begin voice interaction
-2. **Connect Gmail** - Authenticate with your Gmail account
-3. **Grant Permissions** - Allow microphone access for voice commands
-4. **Start Talking** - Use natural language to manage your emails
-
-### Example Voice Interactions
-
-**Inbox Management:**
-- "What's in my inbox today?"
-- "How many unread emails do I have?"
-- "Show me emails from this week"
-
-**Reading Emails:**
-- "Read me the first email"
-- "What did Sarah say in her email?"
-- "Skip to the next email"
-
-**Email Actions:**
-- "Reply to this email saying I'll get back to them tomorrow"
-- "Send an email to john@example.com about the meeting"
-- "Delete all emails from promotions"
-- "Mark this as important"
-
-**Smart Replies:**
-- "Accept this meeting invitation"
-- "Decline politely and suggest next week"
-- "Ask for more details about the project"
-
-## 🛠️ Technical Architecture
-
-### Frontend Components
-- **App.jsx** - Main application with WebRTC voice connection
-- **ToolPanel.jsx** - Email management interface and AI tool integration
-- **EmailAuth.jsx** - OAuth authentication for email providers
-- **SessionControls.jsx** - Voice session management
-- **EventLog.jsx** - Real-time communication debugging
-
-### Backend Services
-- **EmailService** - Gmail API integration with full email operations
-- **Express Server** - RESTful API endpoints for email operations
-- **OAuth Integration** - Secure Gmail authentication flow
-
-### AI Integration
-- **OpenAI Realtime API** - Voice processing and natural language understanding
-- **Function Calling** - Structured email operations
-- **Context Management** - Maintains conversation state for complex email tasks
-
-## 🔒 Privacy & Security
-
-- **OAuth 2.0** - Industry standard authentication
-- **No Password Storage** - Credentials never stored on our servers
-- **Encrypted Communication** - All data transfer is encrypted
-- **Minimal Permissions** - Only request necessary email access
-- **Local Processing** - Voice data processed securely through OpenAI
-
-## 📱 Mobile Support
-
-While optimized for desktop use during commutes, the application works on mobile devices with:
-- Touch-to-talk functionality
-- Mobile-responsive interface
-- Bluetooth headset compatibility
-
-## 🤝 Contributing
-
-This project is designed to be the foundation for the most useful voice-controlled email assistant. We welcome contributions from:
-
-- **Email Integration Specialists** - Adding support for more email providers
-- **Voice UX Designers** - Improving voice interaction patterns
-- **AI Engineers** - Enhancing email understanding and response generation
-- **Security Experts** - Strengthening authentication and privacy measures
-
-## 📄 License
-
-MIT License - Feel free to use this as a starting point for your own email AI assistant.
-
-## 🚗 Ready to Transform Your Commute?
-
-Start your journey to **Inbox Zero** today. Your daily drive will never be the same once you experience hands-free email management with AI.
+Open [http://localhost:3000](http://localhost:3000) and start talking! 🎙️
 
 ---
 
-*Built with OpenAI Realtime API, React, and a vision of making email management accessible to everyone.*
+## 🎯 Voice Commands
+
+<details>
+<summary><strong>📥 Inbox Commands</strong></summary>
+
+| Say This | What Happens |
+|----------|--------------|
+| *"Check my inbox"* | Lists recent emails with summary |
+| *"What's new today?"* | Shows today's emails |
+| *"Any unread emails?"* | Filters to unread only |
+| *"Show emails from Sarah"* | Filters by sender |
+
+</details>
+
+<details>
+<summary><strong>📖 Reading Emails</strong></summary>
+
+| Say This | What Happens |
+|----------|--------------|
+| *"Read the first one"* | Reads email content aloud |
+| *"What did John say?"* | Reads specific sender's email |
+| *"Summarize this email"* | AI provides key points |
+| *"Skip to the next"* | Moves to next email |
+
+</details>
+
+<details>
+<summary><strong>✉️ Sending Emails</strong></summary>
+
+| Say This | What Happens |
+|----------|--------------|
+| *"Send an email to john@example.com"* | Starts composing |
+| *"Reply saying I agree"* | Replies to current email |
+| *"Forward this to the team"* | Forwards with your comment |
+
+</details>
+
+<details>
+<summary><strong>📅 Calendar Commands</strong></summary>
+
+| Say This | What Happens |
+|----------|--------------|
+| *"What's on my calendar?"* | Lists upcoming events |
+| *"Schedule a meeting tomorrow at 2pm"* | Creates new event |
+| *"Add a Google Meet link"* | Adds video conferencing |
+| *"Cancel my 3pm meeting"* | Removes event |
+
+</details>
+
+---
+
+## 🔒 Privacy & Security
+
+| Feature | Description |
+|---------|-------------|
+| 🔐 **OAuth 2.0** | Industry-standard Google authentication |
+| 🚫 **No Password Storage** | We never see your Google password |
+| 🔒 **Encrypted** | All data encrypted in transit |
+| 📍 **Minimal Scope** | Only requests necessary permissions |
+| 🎤 **Voice Privacy** | Audio processed by OpenAI, not stored |
+
+---
+
+## 📁 Project Structure
+
+```
+voice-mail-ai/
+├── api/                    # Vercel serverless functions
+│   ├── _utils/            # Shared utilities
+│   │   ├── email-service.js
+│   │   └── calendar-service.js
+│   ├── auth/              # OAuth endpoints
+│   └── emails/            # Email API routes
+├── client/                # React frontend
+│   ├── components/        # UI components
+│   └── pages/             # Page routes
+├── server.js              # Express dev server
+├── config.env.example     # Environment template
+└── README.md              # You are here!
+```
+
+---
+
+## 🤝 Contributing
+
+Contributions welcome! Areas we'd love help with:
+
+- 🎨 **UI/UX** - Improve the interface
+- 🌍 **i18n** - Add language support
+- 🔊 **Voice UX** - Better conversation patterns
+- 🔌 **Integrations** - Add more email providers
+
+---
+
+## 📄 License
+
+MIT License - Feel free to use and modify!
+
+---
+
+<p align="center">
+  <strong>🎙️ Stop typing. Start talking.</strong><br>
+  <em>Built with ❤️ using OpenAI Realtime API</em>
+</p>
+
+<p align="center">
+  <a href="#-quick-start">Get Started</a> •
+  <a href="./OAUTH_SETUP.md">Setup Guide</a> •
+  <a href="./DEPLOYMENT.md">Deploy</a>
+</p>
